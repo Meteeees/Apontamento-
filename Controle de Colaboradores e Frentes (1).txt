@@ -1,0 +1,3413 @@
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import {
+  Users,
+  HardHat,
+  Calendar,
+  FileSpreadsheet,
+  Printer,
+  Search,
+  Plus,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Building2,
+  Wrench,
+  Filter,
+  Copy,
+  Download,
+  UserPlus,
+  ClipboardList,
+  LayoutGrid,
+  Smartphone,
+  Palette,
+  Edit3,
+  Trash2,
+  Cloud,
+  RefreshCw,
+  ChevronRight,
+  Layers,
+  Check,
+  X,
+  FileDown,
+  Loader2,
+  History,
+  RotateCcw,
+  ChevronLeft
+} from 'lucide-react';
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithCustomToken,
+  signInAnonymously,
+  onAuthStateChanged
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  setDoc,
+  onSnapshot
+} from 'firebase/firestore';
+
+// ==========================================
+// CONFIGURAÇÃO DE SALVAMENTO AUTOMÁTICO (NUVEM)
+// ==========================================
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'controle-obra-app';
+const firebaseConfig =
+  typeof __firebase_config !== 'undefined' && __firebase_config
+    ? JSON.parse(__firebase_config)
+    : null;
+
+const app = firebaseConfig ? initializeApp(firebaseConfig) : null;
+const auth = app ? getAuth(app) : null;
+const db = app ? getFirestore(app) : null;
+
+// ==========================================
+// ESTRUTURA INICIAL DE FRENTES (IGUAL AO PDF 11/11/2026)
+// Com suporte a Nome, Cor Personalizada e Sub-frentes (LOCAL)
+// ==========================================
+const INITIAL_FRENTES_CONFIG = {
+  CIVIL: [
+    { id: 'civ_jardineira', nome: 'JARDINEIRA', cor: '#1e3a8a', temSubfrentes: false, subfrentes: [] },
+    { id: 'civ_ed_garagem', nome: 'ED GARAGEM', cor: '#1e3a8a', temSubfrentes: false, subfrentes: [] },
+    { id: 'civ_le_biscuit', nome: 'ANTIGA LE BISCUIT', cor: '#1e3a8a', temSubfrentes: false, subfrentes: [] },
+    { id: 'civ_fundacao', nome: 'FUNDAÇÃO', cor: '#1e3a8a', temSubfrentes: false, subfrentes: [] }
+  ],
+  METALICA: [
+    { id: 'met_jardineira', nome: 'JARDINEIRA', cor: '#0f172a', temSubfrentes: false, subfrentes: [] },
+    { id: 'met_domus', nome: 'DOMUS', cor: '#1e3a8a', temSubfrentes: false, subfrentes: [] },
+    { id: 'met_atball', nome: 'ATBALL', cor: '#065f46', temSubfrentes: false, subfrentes: [] },
+    { id: 'met_ed_garagem', nome: 'ED GARAGEM', cor: '#3730a3', temSubfrentes: false, subfrentes: [] },
+    { id: 'met_laje', nome: 'LAJE', cor: '#7c2d12', temSubfrentes: false, subfrentes: [] },
+    {
+      id: 'met_diversos',
+      nome: 'DIVERSOS',
+      cor: '#581c87',
+      temSubfrentes: true,
+      subfrentes: [
+        'AJUDANTE DE MOTORISTA',
+        'ALMOXARIFADO',
+        'AREA DE IÇAMENTO',
+        'CORREDOR LE BISCUIT',
+        'COZINHA DOMUS',
+        'ELEVADOR NOVO',
+        'ESCADA ROLANTE',
+        'GALPÃO',
+        'GAS',
+        'MONOVIA DOMUS',
+        'VARIAVEL'
+      ]
+    }
+  ]
+};
+
+// Base de colaboradores estruturada conforme o esqueleto das planilhas de 11/11/2026
+const INITIAL_EMPLOYEES = [
+  // ================= CIVIL =================
+  { id: 'PE10', nome: 'DOUGLAS BORGES DE MELO', setor: 'CIVIL', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE062', nome: 'VITORIO DONATO MACIEL', setor: 'CIVIL', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'CIVIL' },
+
+  { id: 'BET33', nome: 'GIL ELTON ARCANJO DA SILVA', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'MAT16', nome: 'LEONARDO FRANÇA DA SILVA', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'PE12', nome: 'GIVANILDO DE SOUZA LEITE', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'PI03', nome: 'ALEX FREIRE DO NASCIMENTO', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE045', nome: 'JOAO VITOR GOMES', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE063', nome: 'WALISSON CARLOS', setor: 'CIVIL', frentePadrao: 'ANTIGA LE BISCUIT', subfrentePadrao: '', responsavel: 'CIVIL' },
+
+  { id: 'BET01', nome: 'ROBERTO MARCELINO DA SILVA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'CA019', nome: 'SEBASTIÃO FONSECA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'CA02', nome: 'ALEXSANDRO ROSA DA SILVA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'M0066', nome: 'MARCOS ANTONIO DE OLIVEIRA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'PE09', nome: 'RONALDO DA SILVA LIMA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'PE15', nome: 'JOSE PEREIRA DE PONTES JUNIOR', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE011', nome: 'CRISTIAN BRUNO PEREIRA A.', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE048', nome: 'MARCILIO NESTOR', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'REGINALDO' },
+  { id: 'SE050', nome: 'MARCOS ANTONIO DA SILVA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE057', nome: 'RYAN BELARMINO', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE066', nome: 'WILLIAM MOTA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE074', nome: 'MAURICIO ROGERIO DO N.', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SE112', nome: 'THIAGO RODOLFO DA SILVA', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SER02', nome: 'ROMARIO VIEIRA DE MORAIS', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+  { id: 'SO030', nome: 'UBERLON RODRIGUES PINTO', setor: 'CIVIL', frentePadrao: 'FUNDAÇÃO', subfrentePadrao: '', responsavel: 'CIVIL' },
+
+  // ================= METÁLICA: JARDINEIRA =================
+  { id: 'GUI01', nome: 'SEBASTIÃO FLORENTINO DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ005', nome: 'EVERALDO HONORIO DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ022', nome: 'SIVALDO ELIAS DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0027', nome: 'CARLOS ANTONIO DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0031', nome: 'MARCELINO LEONCIO DOS SANTOS', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE040', nome: 'JADSON DIEGO GONÇALVES DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE075', nome: 'JEFERSON ANDRADE DO NASCIMENTO', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE088', nome: 'WILLIAS CAVALCANTE PEREIRA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SER04', nome: 'LINDERSON NOGUEIRA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SER05', nome: 'MILDISON DANILO DOS SANTOS R.', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO017', nome: 'LUCIO HENRIQUE BARBOSA DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO112', nome: 'CLEBSON VICENTE DA SILVA', setor: 'METALICA', frentePadrao: 'JARDINEIRA', subfrentePadrao: '', responsavel: 'METÁLICA' },
+
+  // ================= METÁLICA: DOMUS =================
+  { id: 'MAÇ038', nome: 'MAURICLENIO ANSELMO DINIZ DEL', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PE04', nome: 'GERSON COSMO DOS SANTOS', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI08', nome: 'EURISMARQUES MACENA DANTAS', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE003', nome: 'CARLOS EDUARDO DA SILVA', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE027', nome: 'CARLOS LEANDRO DA SILVA', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE092', nome: 'CARLOS GABRIEL PEREIRA DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE102', nome: 'GILSON DA SILVA PACHECO', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SER03', nome: 'ALEXANDRE PEDRO DO N', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SER08', nome: 'ALEX DOS SANTOS MACIEL', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO068', nome: 'SERGIO RODRIGO DA SILVA SOUZA', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO100', nome: 'ALISSON FRANCISCO DA SILVA', setor: 'METALICA', frentePadrao: 'DOMUS', subfrentePadrao: '', responsavel: 'METÁLICA' },
+
+  // ================= METÁLICA: ATBALL =================
+  { id: 'M0026', nome: 'RAFAEL RICARDO DOS SANTOS SILVA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0028', nome: 'WILSON SOARES SILVA JUNIOR', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0040', nome: 'FELIPE SANTOS DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0050', nome: 'ALBENIS JOSE DA SILVA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI09', nome: 'JOALISSON BEZERRA DA SILVA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE010', nome: 'ANTONIO TEODORIO DA COSTA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE035', nome: 'ALISSON DA SILVA PEREIRA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE067', nome: 'GUILHERME CESAR DA SILVA COSTA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO019', nome: 'ROBSON CRUZ DO NASCIMENTO', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO026', nome: 'LUIZ CARLOS ALVES DA SILVA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO046', nome: 'VALDECIR VICENTE DA SILVA FILHO', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO051', nome: 'WELLINGTON SANTOS DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO053', nome: 'GUILHERME DIONISIO', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO054', nome: 'RAFAEL DURVAL DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO061', nome: 'JOSE FERNANDO DA SILVA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO063', nome: 'WALISON DA SILVA MARQUES', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO083', nome: 'JOSE RODRIGO SANTOS RAMOS', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO090', nome: 'GILSON FERREIRA DE ARAUJO', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO093', nome: 'JOSIVAN GOMES TRAJANO', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO094', nome: 'LOURIVAL FRANCISCO DA SILVA J.', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO095', nome: 'PEDRO WILLIAN DE CARVALHO G', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO212', nome: 'ALBERTO JOSE ALVES DE SOUSA', setor: 'METALICA', frentePadrao: 'ATBALL', subfrentePadrao: '', responsavel: 'METÁLICA' },
+
+  // ================= METÁLICA: ED GARAGEM =================
+  { id: 'AR04', nome: 'ANDERSON DE JESUS DOS S.', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'AR17', nome: 'KENIO GOMES DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'CA20', nome: 'MARIVALDO DA SILVA SANTOS', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'IMP05', nome: 'JOSENIR DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'LIX02', nome: 'JOSE TARCISIO MARTINS DE ARAUJO', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ011', nome: 'LUAN HENRIQUE', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ042', nome: 'JOSE CARLOS GONÇALVES', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0003', nome: 'LUIZ CARLOS DOS SANTOS', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0005', nome: 'JOILHO LAURENTINO TAVARES', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0016', nome: 'LUCIANO CABRAL DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0041', nome: 'EWERTON DINIZ', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0052', nome: 'MARCOS JOSE FRANCISCO DE LIMA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0064', nome: 'JUAN CARLOS FREITAS DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI11', nome: 'JOÃO VITOR SOUZA DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE073', nome: 'JOSE CARLOS DE OLIVEIRA FILHO', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO025', nome: 'LUIZ ALBERTO FERREIRA DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO037', nome: 'EDUARDO BARBOSA DE ARAUJO', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO043', nome: 'EDUARDO FELIPE DOS S. SANTANA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO052', nome: 'GABRIEL DOMINGOS DOS SANTOS', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO067', nome: 'JULLYAN AUGUSTO DANTAS DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO088', nome: 'JAELSON FRANCISCO LOPES', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO096', nome: 'LUAN CARLOS DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO101', nome: 'JOSE HILTON DOS SANTOS', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO102', nome: 'EDIVANIO DIAS BATISTA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO213', nome: 'IRANDIR JOSE DA SILVA', setor: 'METALICA', frentePadrao: 'ED GARAGEM', subfrentePadrao: '', responsavel: 'METÁLICA' },
+
+  // ================= METÁLICA: LAJE =================
+  { id: 'MAÇ001', nome: 'MARCILIO DOS SANTOS SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ006', nome: 'LEANDRO DA SILVA BARBOSA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ009', nome: 'EDUARDO LOPES DO CARMO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ010', nome: 'FRANCISCO DE ASSIS NARCISO DAS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ013', nome: 'JASIEL FERNANDES DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ015', nome: 'LUIZ FELIPE BARBOSA DE ALMEIDA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ020', nome: 'JOALISSON PAULINO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'MAÇ044', nome: 'EDVALDO DE LIMA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0002', nome: 'MARCOS ANTONIO LOPES DE F.', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0006', nome: 'MARCOS ANTONIO BATISTA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0008', nome: 'JOSE HELIO AMORIM DE FARIAS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0012', nome: 'RAFAEL JOSE COSTA FELIX', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0015', nome: 'LEANDRO PEREIRA BENEDITO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0017', nome: 'ANTONIO CARLOS DE LIMA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0019', nome: 'CARLOS ANTONIO SILVA E SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0021', nome: 'JAMELSON SEVERINO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0022', nome: 'DANILO FERREIRA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0025', nome: 'RENATO PAULO SILVA DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0033', nome: 'ANDRE LUIZ DE SOUZA MELO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0035', nome: 'JAILSON DE SOUZA SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0043', nome: 'IVAN TRAJANO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0044', nome: 'ERIBERTO NOEL DE FRANÇA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0051', nome: 'ALEX FREITAS PAULINO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0053', nome: 'IVANILDO HENRIQUE DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0057', nome: 'JOSIVALDO MARCULINO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0067', nome: 'CLENILSON DA SILVA LEITE', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0068', nome: 'CARLOS FERNANDES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0070', nome: 'ELTON VASCONCELO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0073', nome: 'CLEONILDO VIEGAS DO NASCIMENTO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0074', nome: 'EDILSON DE OLIVEIRA DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0100', nome: 'DJAVAN ABILIO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'M0130', nome: 'HERONIDES GONÇALVES DE LIRA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'OPM01', nome: 'AILTON EVANGELISTA DA SILVA FILHO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI01', nome: 'ISMAEL FRANCISCO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI02', nome: 'EDVALDO BATISTA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI05', nome: 'JOSE ANTONIO LEONCIO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI07', nome: 'LUCIANO ROSENDO PEREIRA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'PI15', nome: 'LUIZ ANDERSON BARBOSA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE007', nome: 'LUCAS DANIEL RODRIGUES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'REGINALDO' },
+  { id: 'SE015', nome: 'LINALDO DE LIMA TAVARES', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE030', nome: 'JOELSON FLORENCIO DA CRUZ', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE033', nome: 'GERSON SOARES DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE060', nome: 'MARCONE FAUSTINO MANOEL', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE082', nome: 'PABLO YAN FREIRE FELIX', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE084', nome: 'MYKAEL BRUNO FREITAS DE ARAUJO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE090', nome: 'EDINERIO GOMES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE095', nome: 'LUIZ FELIPE SILVA CASTRO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SE105', nome: 'EDVALDO FRANCISCO NETO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SER06', nome: 'ANACLETO SANTOS DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO002', nome: 'CICERO RODRIGUES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO003', nome: 'ADELMO SALES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO004', nome: 'CARLOS CESAR DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO011', nome: 'JOSENILDO CORREIA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO012', nome: 'CLAUDIO FLAUZINO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO014', nome: 'CARLOS EDUARDO GONZAGA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO015', nome: 'RENATO FRANCISCO DE SOUZA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO016', nome: 'JOSENILDO BEZERRA DE ALMEIDA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO021', nome: 'RICARDO DO SANTOS SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO022', nome: 'GIZELDA MUNIZ SALES', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO023', nome: 'WALDECI DAMIÃO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO029', nome: 'JOÃO BATISTA FIRMINO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO031', nome: 'ALISSON SILVA NASCIMENTO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO032', nome: 'RONILDO CRUZ DO NASCIMENTO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO035', nome: 'JOSE ANTONIO ANDRE SOARES', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO038', nome: 'RICARDO AMARO DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO039', nome: 'ALEXANDRE ARAUJO DE CARVALHO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO040', nome: 'EDIMILSON DE PAULA PINTO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO042', nome: 'ANTONIO TRAJANO DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO047', nome: 'MACIEL BATISTA DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO048', nome: 'IRAN GUILHERME ALMEIDA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO057', nome: 'JORGE LUIZ LOPES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO058', nome: 'DOUGLAS DIONISIO RODRIGUES DAS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO060', nome: 'JOSE GONZAGA MACIEL', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO069', nome: 'MACIEL JUNIOR DIAS DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO070', nome: 'VALDIR SILVA DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO074', nome: 'FLAVIO FERREIRA DE ARAUJO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO076', nome: 'LUCIANO FLORENTINO COSMO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO077', nome: 'SEVERINO DO RAMO DA SILVA JUNIOR', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO078', nome: 'GEILSON ALVES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO081', nome: 'DENILSON DA SILVA MARINHO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO084', nome: 'ALTINO FRANCISCO DA SILVA NETO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO087', nome: 'SANDRO DOS SANTOS N.', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO091', nome: 'VALMIR MENDES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO097', nome: 'JOSE RENATO VIEIRA DE SOUZA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO104', nome: 'MARCONE ALEXANDRE BORGES', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO107', nome: 'REGINALDO JOSE FRANCISCO DE A', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO108', nome: 'ELIDENE CEZARIO DE OLIVEIRA LIMA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO114', nome: 'LEONARDO PIRES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO115', nome: 'MATHEUS SOUZA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO116', nome: 'BRUNA KATIANE ROCHA DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO120', nome: 'JOSIMAR DE OLIVEIRA TRAJANO', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO158', nome: 'RODRIGO DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO211', nome: 'CARLOS ALVES DA SILVA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO411', nome: 'JORGE MANOEL CABRAL', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO580', nome: 'GILVAN RODRIGUES DE LIMA', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+  { id: 'SO590', nome: 'KAUA NOGUEIRA DOS SANTOS', setor: 'METALICA', frentePadrao: 'LAJE', subfrentePadrao: '', responsavel: 'METÁLICA' },
+
+  // ================= METÁLICA: DIVERSOS (COM SUB-FRENTES / LOCAL) =================
+  { id: 'SE023', nome: 'CARLOS HENRIQUE DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AJUDANTE DE MOTORISTA', responsavel: 'MAYKOLL' },
+  { id: 'SE072', nome: 'JOSE CARLOS DA SILVA JUNIOR', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AJUDANTE DE MOTORISTA', responsavel: 'METÁLICA' },
+  { id: 'SE101', nome: 'DANIEL VICENTE DE SOUZA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AJUDANTE DE MOTORISTA', responsavel: 'METÁLICA' },
+  { id: 'SE008', nome: 'JOÃO VICTOR DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AJUDANTE DE MOTORISTA', responsavel: 'MAYKOLL' },
+  { id: 'SE049', nome: 'AELIUDES CAVALCANTI NASCIMENTO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ALMOXARIFADO', responsavel: 'METÁLICA' },
+  { id: 'SE079', nome: 'PAULO HENRIQUE DA SILVA TEODOSIO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ALMOXARIFADO', responsavel: 'METÁLICA' },
+  { id: 'M0011', nome: 'JOSE ROBERTO ANDRE DA COSTA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AREA DE IÇAMENTO', responsavel: 'METÁLICA' },
+  { id: 'SE065', nome: 'WANDERSON SOARES DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AREA DE IÇAMENTO', responsavel: 'METÁLICA' },
+  { id: 'SO010', nome: 'ANDERSON MARINHO DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AREA DE IÇAMENTO', responsavel: 'METÁLICA' },
+  { id: 'SO066', nome: 'ERIK VITOR DA SILVA SANTOS', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AREA DE IÇAMENTO', responsavel: 'METÁLICA' },
+  { id: 'SO001', nome: 'JONATHAN DA SILVA ANDRADE', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'AREA DE IÇAMENTO', responsavel: 'METÁLICA' },
+  { id: 'M0034', nome: 'SAULO GEORDANI DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'CORREDOR LE BISCUIT', responsavel: 'METÁLICA' },
+  { id: 'M0058', nome: 'JOSSAN LOPES RODRIGUES', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'CORREDOR LE BISCUIT', responsavel: 'METÁLICA' },
+  { id: 'SO109', nome: 'RODRIGO BARBOSA DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'CORREDOR LE BISCUIT', responsavel: 'METÁLICA' },
+  { id: 'MAÇ008', nome: 'JOALISON PEREIRA DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'COZINHA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'M0032', nome: 'FELIPE SILVA DOS SANTOS', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'COZINHA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'SE096', nome: 'JOSE IRAILSON DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'COZINHA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'SE106', nome: 'JONAS LOURENÇO DE PAIVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'COZINHA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'PE05', nome: 'GILVAN CAMELO DE CARVALHO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ELEVADOR NOVO', responsavel: 'METÁLICA' },
+  { id: 'PE11', nome: 'GLEYSSON LIMA DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ELEVADOR NOVO', responsavel: 'METÁLICA' },
+  { id: 'SE012', nome: 'JOSE CARLOS MARCOS DA CRUZ', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ELEVADOR NOVO', responsavel: 'METÁLICA' },
+  { id: 'SE110', nome: 'BRUNO DA SILVA ALVES', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ELEVADOR NOVO', responsavel: 'METÁLICA' },
+  { id: 'MAÇ018', nome: 'JOAO VICTOR VIRGINIO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'MAÇ043', nome: 'ERICLEITON LUCAS DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'M0018', nome: 'WELLINGTON DE OLIVEIRA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'M0055', nome: 'JOSIVALDO GONÇALVES GOMES', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'M0063', nome: 'GIVANILDO CORREIA DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'M0062', nome: 'RAFAEL ALVES GOUVEIA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'FI06', nome: 'JACKSON DOS SANTOS LUCAS', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'SE108', nome: 'KAUA GOMES DE SOUZA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'SO027', nome: 'VALMIR VICENTE LUIZ', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'SO036', nome: 'AFRIZIO MACHADO BELARMINO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'ESCADA ROLANTE', responsavel: 'METÁLICA' },
+  { id: 'AR01', nome: 'MARCELO DOS SANTOS SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'GALPÃO', responsavel: 'METÁLICA' },
+  { id: 'AR02', nome: 'PEDRO CELESTINO DINIZ', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'GALPÃO', responsavel: 'METÁLICA' },
+  { id: 'SE064', nome: 'MARIVAN PEREIRA NOGUEIRA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'GAS', responsavel: 'METÁLICA' },
+  { id: 'OPM02', nome: 'ADRIANO BARBOSA SOARES', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'MONOVIA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'GUI02', nome: 'EMILLY VITORIA DE OLIVEIRA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'MONOVIA DOMUS', responsavel: 'METÁLICA' },
+  { id: 'BC01', nome: 'EDISON ALVES DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'BC02', nome: 'FABRICIO ALVES DE OLIVEIRA JUNIOR', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'BC03', nome: 'FRANCISCO ITALO DA S. RODRIGUES', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'BC04', nome: 'THIAGO TRAJANO DE ARAUJO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'BC05', nome: 'VALDILENE BELO DE ARAGÃO', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'BOMB.HID', nome: 'CARLOS ANTONIO DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA001', nome: 'ALEX JOÃO DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA003', nome: 'SAMUEL SILVA NUNES DE LISBOA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA004', nome: 'JOSINALDO DE OLIVEIRA SOUZA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA008', nome: 'MARCIO SOARES DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA010', nome: 'JARDEL FERNANDES DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' },
+  { id: 'MDA075', nome: 'GABRIEL CALIXTO DA SILVA', setor: 'METALICA', frentePadrao: 'DIVERSOS', subfrentePadrao: 'VARIAVEL', responsavel: 'METÁLICA' }
+];
+
+const STATUS_OPCOES = [
+  'PRESENTE',
+  'FALTA',
+  'ATESTADO',
+  'FOLGA',
+  'PONTO BATIDO, MAS NÃO FOI VISTO',
+  'NÃO CONFIRMADO',
+  'FALTOU CONFIRMAÇÃO DO RH',
+  'AFASTADO'
+];
+
+const CORES_RAPIDAS = [
+  '#0f172a', // Slate
+  '#1e3a8a', // Azul Escuro
+  '#0369a1', // Azul Celeste
+  '#065f46', // Verde Esmeralda
+  '#15803d', // Verde Folha
+  '#7c2d12', // Marrom / Terracota
+  '#b45309', // Âmbar / Laranja
+  '#991b1b', // Vermelho
+  '#581c87', // Roxo
+  '#831843', // Vinho / Rosa Escuro
+  '#3730a3'  // Índigo
+];
+
+// Retorna a data atual real do sistema no formato YYYY-MM-DD
+const obterDataHojeISO = () => {
+  const hoje = new Date();
+  const ano = hoje.getFullYear();
+  const mes = String(hoje.getMonth() + 1).padStart(2, '0');
+  const dia = String(hoje.getDate()).padStart(2, '0');
+  return `${ano}-${mes}-${dia}`;
+};
+
+// Gera um apontamento diário reiniciado (limpo para um novo dia)
+const gerarPlanilhaReiniciada = (listaFuncionarios, modo = 'PADRAO') => {
+  const novoDia = {};
+  listaFuncionarios.forEach((emp) => {
+    novoDia[emp.id] = {
+      status: modo === 'EM_BRANCO' ? 'NÃO CONFIRMADO' : 'PRESENTE',
+      frente: emp.frentePadrao,
+      subfrente: emp.subfrentePadrao || '',
+      responsavel: emp.responsavel || ''
+    };
+  });
+  return novoDia;
+};
+
+export default function App() {
+  const dataHojeISO = obterDataHojeISO();
+
+  // Navegação e Filtros (Inicia automaticamente na data de HOJE)
+  const [abaAtiva, setAbaAtiva] = useState('quadro'); // 'quadro', 'celular', 'apontamento', 'ocorrencias', 'personalizar'
+  const [dataSelecionada, setDataSelecionada] = useState(() => obterDataHojeISO());
+  const [turnoSelecionado, setTurnoSelecionado] = useState('MANHA'); // 'MANHA' | 'TARDE'
+  const [setorFiltro, setSetorFiltro] = useState('METALICA'); // 'CIVIL' | 'METALICA'
+  const [frenteFiltro, setFrenteFiltro] = useState('TODAS');
+  const [statusFiltro, setStatusFiltro] = useState('TODOS');
+  const [busca, setBusca] = useState('');
+  const [notificacao, setNotificacao] = useState(null);
+
+  // Estados Persistidos Automaticamente (Mantém 11/11/2026 salvo no histórico + dias novos)
+  const [funcionarios, setFuncionarios] = useState(INITIAL_EMPLOYEES);
+  const [frentesConfig, setFrentesConfig] = useState(INITIAL_FRENTES_CONFIG);
+  const [apontamentosPorDia, setApontamentosPorDia] = useState(() => ({
+    '2026-11-11_MANHA': gerarPlanilhaReiniciada(INITIAL_EMPLOYEES, 'PADRAO'),
+    '2026-11-11_TARDE': gerarPlanilhaReiniciada(INITIAL_EMPLOYEES, 'PADRAO')
+  }));
+
+  // Estado de Sincronização / Auto-save
+  const [user, setUser] = useState(null);
+  const [dadosCarregados, setDadosCarregados] = useState(false);
+  const [statusSave, setStatusSave] = useState('Salvo automaticamente');
+  const [ultimoSaveHora, setUltimoSaveHora] = useState('');
+  const ignorarProximoSaveRef = useRef(false);
+
+  // Modais e Formulários
+  const [novoFuncModal, setNovoFuncModal] = useState(false);
+  const [modalReiniciarDia, setModalReiniciarDia] = useState(false);
+  const [formNovoFunc, setFormNovoFunc] = useState({
+    id: '',
+    nome: '',
+    setor: 'METALICA',
+    frentePadrao: 'LAJE',
+    subfrentePadrao: '',
+    responsavel: 'METÁLICA'
+  });
+
+  // Edição Rápida ao clicar em um colaborador na Planilha Esqueleto
+  const [colabEditandoRapido, setColabEditandoRapido] = useState(null);
+  const [idTempModal, setIdTempModal] = useState('');
+  const [confirmarExclusaoId, setConfirmarExclusaoId] = useState(null);
+  const [subAbaPersonalizar, setSubAbaPersonalizar] = useState('frentes'); // 'frentes' | 'funcionarios'
+
+  // Criação de Frente / Sub-frente na aba Personalizar
+  const [novaFrenteForm, setNovaFrenteForm] = useState({
+    setor: 'METALICA',
+    nome: '',
+    cor: '#1e3a8a',
+    temSubfrentes: false
+  });
+  const [novaSubfrenteInput, setNovaSubfrenteInput] = useState({});
+  const [gerandoPdf, setGerandoPdf] = useState(false);
+  const [modalPdfAberto, setModalPdfAberto] = useState(false);
+
+  const mostrarAviso = (msg) => {
+    setNotificacao(msg);
+    setTimeout(() => setNotificacao(null), 3500);
+  };
+
+  // ==========================================
+  // MOTOR DE EXPORTAÇÃO PDF VETORIAL (ALTA QUALIDADE)
+  // ==========================================
+  const carregarScriptsPdf = () => {
+    return new Promise((resolve, reject) => {
+      if (window.jspdf && window.jspdf.jsPDF) {
+        resolve(window.jspdf.jsPDF);
+        return;
+      }
+      const scriptJspdf = document.createElement('script');
+      scriptJspdf.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      scriptJspdf.onload = () => {
+        const scriptAutoTable = document.createElement('script');
+        scriptAutoTable.src =
+          'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js';
+        scriptAutoTable.onload = () => resolve(window.jspdf.jsPDF);
+        scriptAutoTable.onerror = reject;
+        document.head.appendChild(scriptAutoTable);
+      };
+      scriptJspdf.onerror = reject;
+      document.head.appendChild(scriptJspdf);
+    });
+  };
+
+  const hexParaRgb = (hex) => {
+    const limpo = (hex || '#0f172a').replace('#', '');
+    const bigint = parseInt(limpo, 16);
+    if (isNaN(bigint)) return [15, 23, 42];
+    return [(bigint >> 16) & 255, (bigint >> 8) & 255, bigint & 255];
+  };
+
+  const gerarPdfPlanilhaOficial = async (formatoPapel = 'a4', incluirFaltas = false) => {
+    try {
+      setGerandoPdf(true);
+      const jsPDF = await carregarScriptsPdf();
+      const docPdf = new jsPDF({
+        orientation: 'landscape',
+        unit: 'mm',
+        format: formatoPapel,
+        compress: true
+      });
+
+      const larguraPagina = docPdf.internal.pageSize.getWidth();
+      const alturaPagina = docPdf.internal.pageSize.getHeight();
+      const dataBR = dataSelecionada.split('-').reverse().join('/');
+      const { colunas, maxLinhas } = dadosEsqueletoPlanilha;
+
+      // Metadados de cada coluna da tabela para estilização vetorial exata
+      const metaColunas = [];
+      const cabecalhoLinha = [];
+
+      colunas.forEach((col) => {
+        const rgb = hexParaRgb(col.cor);
+        cabecalhoLinha.push(col.nome);
+        metaColunas.push({ tipo: 'NOME', rgb, nomeFrente: col.nome });
+
+        cabecalhoLinha.push('ID');
+        metaColunas.push({ tipo: 'ID', rgb, nomeFrente: col.nome });
+
+        if (col.temSubfrentes) {
+          cabecalhoLinha.push('LOCAL');
+          metaColunas.push({ tipo: 'LOCAL', rgb, nomeFrente: col.nome });
+        }
+      });
+
+      // Corpo de dados (linhas lado a lado iguais ao PDF enviado)
+      const totalLinhasReais = Math.max(
+        ...colunas.map((c) => c.colaboradores.length),
+        1
+      );
+      const corpoTabela = [];
+
+      for (let r = 0; r < totalLinhasReais; r++) {
+        const linha = [];
+        colunas.forEach((col) => {
+          const emp = col.colaboradores[r];
+          linha.push(emp ? emp.nome : '');
+          linha.push(emp ? emp.id : '');
+          if (col.temSubfrentes) {
+            linha.push(emp ? emp.subfrenteAtual || '' : '');
+          }
+        });
+        corpoTabela.push(linha);
+      }
+
+      // Linha de totalizadores por frente no rodapé da grade
+      const linhaTotais = [];
+      colunas.forEach((col) => {
+        linhaTotais.push(`TOTAL ${col.nome}`);
+        linhaTotais.push(`${col.colaboradores.length}`);
+        if (col.temSubfrentes) {
+          linhaTotais.push('');
+        }
+      });
+      corpoTabela.push(linhaTotais);
+
+      // Ajuste inteligente de fonte conforme a quantidade de colunas e papel (A4 ou A3)
+      const qtdColunas = metaColunas.length;
+      const tamanhoFonteBase =
+        formatoPapel === 'a3'
+          ? qtdColunas > 10
+            ? 7.5
+            : 9
+          : qtdColunas > 10
+          ? 5.4
+          : 7.5;
+
+      // Desenha o Cabeçalho Superior Oficial na Página
+      const desenharTopoPagina = () => {
+        docPdf.setFillColor(241, 245, 249);
+        docPdf.setDrawColor(30, 41, 59);
+        docPdf.setLineWidth(0.35);
+        docPdf.rect(6, 6, larguraPagina - 12, 8.5, 'FD');
+
+        docPdf.setFont('helvetica', 'bold');
+        docPdf.setFontSize(7.5);
+        docPdf.setTextColor(71, 85, 105);
+        docPdf.text(
+          `SETOR: ${setorFiltro}  |  TURNO: ${turnoSelecionado === 'MANHA' ? 'MANHÃ' : 'TARDE'}  |  PRESENTES: ${kpis.presentes}`,
+          9,
+          11.5
+        );
+
+        docPdf.setFontSize(11);
+        docPdf.setTextColor(15, 23, 42);
+        docPdf.text('CONTROLE DE COLABORADORES', larguraPagina / 2, 11.7, {
+          align: 'center'
+        });
+
+        docPdf.setFontSize(9.5);
+        docPdf.text(dataBR, larguraPagina - 9, 11.7, { align: 'right' });
+      };
+
+      docPdf.autoTable({
+        head: [cabecalhoLinha],
+        body: corpoTabela,
+        showHead: 'firstPage',
+        startY: 15,
+        margin: { top: 6, right: 6, bottom: 8, left: 6 },
+        theme: 'grid',
+        styles: {
+          font: 'helvetica',
+          fontSize: tamanhoFonteBase,
+          cellPadding: formatoPapel === 'a3' ? 1.2 : qtdColunas > 10 ? 0.65 : 1.1,
+          lineColor: [40, 40, 40],
+          lineWidth: 0.2,
+          textColor: [15, 23, 42],
+          valign: 'middle',
+          overflow: 'linebreak'
+        },
+        didParseCell: (data) => {
+          const meta = metaColunas[data.column.index];
+          if (!meta) return;
+
+          if (data.section === 'head') {
+            data.cell.styles.fillColor = meta.rgb;
+            data.cell.styles.textColor = [255, 255, 255];
+            data.cell.styles.fontStyle = 'bold';
+            data.cell.styles.halign = 'center';
+            data.cell.styles.fontSize = tamanhoFonteBase + 0.4;
+          } else if (data.section === 'body') {
+            const isUltimaLinhaTotal = data.row.index === corpoTabela.length - 1;
+
+            if (isUltimaLinhaTotal) {
+              data.cell.styles.fillColor = [226, 232, 240];
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.textColor = [15, 23, 42];
+              if (meta.tipo === 'ID') data.cell.styles.halign = 'center';
+              return;
+            }
+
+            if (meta.tipo === 'ID') {
+              data.cell.styles.halign = 'center';
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor =
+                data.row.index % 2 === 1 ? [241, 245, 249] : [248, 250, 252];
+            } else if (meta.tipo === 'LOCAL') {
+              data.cell.styles.halign = 'center';
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor = data.cell.raw
+                ? [243, 232, 255]
+                : data.row.index % 2 === 1
+                ? [248, 250, 252]
+                : [255, 255, 255];
+            } else {
+              data.cell.styles.fontStyle = 'bold';
+              data.cell.styles.fillColor =
+                data.row.index % 2 === 1 ? [248, 250, 252] : [255, 255, 255];
+            }
+          }
+        },
+        didDrawPage: (data) => {
+          if (data.pageNumber === 1) {
+            desenharTopoPagina();
+          }
+          // Rodapé discreto com numeração de página
+          docPdf.setFontSize(6.5);
+          docPdf.setTextColor(120, 120, 120);
+          docPdf.text(
+            `Documento gerado em alta definição • ${dataBR} • Setor ${setorFiltro}`,
+            6,
+            alturaPagina - 3
+          );
+        }
+      });
+
+      // Se o usuário pediu para incluir também a folha de Faltas / Ocorrências no mesmo PDF
+      if (incluirFaltas) {
+        const listaOcorrencias = listaCompletaTurno
+          .filter((i) => i.setor === setorFiltro && i.statusAtual !== 'PRESENTE')
+          .sort((a, b) => a.statusAtual.localeCompare(b.statusAtual));
+
+        docPdf.addPage(formatoPapel, 'landscape');
+        const paginaInicialFaltas = docPdf.internal.getNumberOfPages();
+
+        const corpoFaltas =
+          listaOcorrencias.length > 0
+            ? listaOcorrencias.map((oc) => [
+                oc.nome,
+                oc.id,
+                oc.frenteAtual + (oc.subfrenteAtual ? ` (${oc.subfrenteAtual})` : ''),
+                oc.responsavelAtual || '-',
+                oc.statusAtual
+              ])
+            : [['NENHUMA FALTA OU OCORRÊNCIA REGISTRADA NESTE TURNO', '-', '-', '-', 'OK']];
+
+        docPdf.autoTable({
+          head: [['FUNCIONÁRIOS', 'ID', 'FRENTE / LOCAL', 'RESPONSÁVEL', 'JUSTIFICATIVA']],
+          body: corpoFaltas,
+          showHead: 'firstPage',
+          startY: 17,
+          margin: { top: 8, right: 6, bottom: 10, left: 6 },
+          theme: 'grid',
+          headStyles: {
+            fillColor: [153, 27, 27],
+            textColor: [255, 255, 255],
+            fontStyle: 'bold',
+            halign: 'center'
+          },
+          styles: {
+            font: 'helvetica',
+            fontSize: 8.5,
+            cellPadding: 2,
+            lineColor: [40, 40, 40],
+            lineWidth: 0.25,
+            textColor: [15, 23, 42],
+            fontStyle: 'bold'
+          },
+          columnStyles: {
+            1: { halign: 'center', cellWidth: 28 },
+            3: { halign: 'center', cellWidth: 42 },
+            4: { halign: 'center', cellWidth: 65 }
+          },
+          didDrawPage: (data) => {
+            if (data.pageNumber === paginaInicialFaltas) {
+              docPdf.setFillColor(15, 23, 42);
+              docPdf.rect(6, 6, larguraPagina - 12, 9, 'F');
+              docPdf.setFont('helvetica', 'bold');
+              docPdf.setFontSize(10);
+              docPdf.setTextColor(255, 255, 255);
+              docPdf.text(
+                `RELATÓRIO DE FALTAS E FUNCIONÁRIOS COM BATIDA NÃO ENCONTRADOS - ${dataBR} (${setorFiltro})`,
+                larguraPagina / 2,
+                12,
+                { align: 'center' }
+              );
+            }
+          }
+        });
+      }
+
+      const nomeArquivo = `CONTROLE_DE_FUNCIONARIOS_${dataBR.replace(/\//g, '.')}_${setorFiltro}_${turnoSelecionado}.pdf`;
+      docPdf.save(nomeArquivo);
+      setModalPdfAberto(false);
+      mostrarAviso(`PDF Vetorial "${nomeArquivo}" baixado com qualidade máxima!`);
+    } catch (erro) {
+      console.error('Erro ao gerar PDF:', erro);
+      mostrarAviso('Não foi possível gerar o PDF no momento. Tente novamente.');
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
+
+  // Gerar apenas o PDF de Relatório de Faltas (Retrato A4)
+  const gerarPdfSomenteFaltas = async () => {
+    try {
+      setGerandoPdf(true);
+      const jsPDF = await carregarScriptsPdf();
+      const docPdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4',
+        compress: true
+      });
+
+      const larguraPagina = docPdf.internal.pageSize.getWidth();
+      const dataBR = dataSelecionada.split('-').reverse().join('/');
+      const listaOcorrencias = listaCompletaTurno
+        .filter((i) => i.setor === setorFiltro && i.statusAtual !== 'PRESENTE')
+        .sort((a, b) => a.statusAtual.localeCompare(b.statusAtual));
+
+      docPdf.setFillColor(15, 23, 42);
+      docPdf.rect(8, 8, larguraPagina - 16, 10, 'F');
+      docPdf.setFont('helvetica', 'bold');
+      docPdf.setFontSize(9.5);
+      docPdf.setTextColor(255, 255, 255);
+      docPdf.text(
+        `RELATÓRIO DE FALTAS E OCORRÊNCIAS - ${dataBR} (${setorFiltro})`,
+        larguraPagina / 2,
+        14.3,
+        { align: 'center' }
+      );
+
+      const corpoFaltas =
+        listaOcorrencias.length > 0
+          ? listaOcorrencias.map((oc) => [
+              oc.nome,
+              oc.id,
+              oc.responsavelAtual || '',
+              oc.statusAtual
+            ])
+          : [['NENHUMA OCORRÊNCIA REGISTRADA NESTE TURNO', '-', '-', '-']];
+
+      docPdf.autoTable({
+        head: [['FUNCIONÁRIOS', 'ID', 'RESPONSÁVEL', 'JUSTIFICATIVA']],
+        body: corpoFaltas,
+        showHead: 'firstPage',
+        startY: 20,
+        margin: { top: 8, right: 8, bottom: 10, left: 8 },
+        theme: 'grid',
+        headStyles: {
+          fillColor: [30, 41, 59],
+          textColor: [255, 255, 255],
+          fontStyle: 'bold',
+          halign: 'center'
+        },
+        styles: {
+          font: 'helvetica',
+          fontSize: 8.5,
+          cellPadding: 2,
+          lineColor: [40, 40, 40],
+          lineWidth: 0.25,
+          textColor: [15, 23, 42],
+          fontStyle: 'bold'
+        },
+        columnStyles: {
+          1: { halign: 'center', cellWidth: 24 },
+          2: { halign: 'center', cellWidth: 36 },
+          3: { cellWidth: 58 }
+        }
+      });
+
+      const nomeArq = `RELATORIO_DE_FALTAS_${dataBR.replace(/\//g, '.')}_${setorFiltro}.pdf`;
+      docPdf.save(nomeArq);
+      setModalPdfAberto(false);
+      mostrarAviso(`PDF de Faltas "${nomeArq}" baixado com sucesso!`);
+    } catch (err) {
+      console.error(err);
+      mostrarAviso('Erro ao gerar o PDF de faltas.');
+    } finally {
+      setGerandoPdf(false);
+    }
+  };
+
+  // ==========================================
+  // 1. AUTENTICAÇÃO E CARREGAMENTO (FIRESTORE)
+  // ==========================================
+  useEffect(() => {
+    if (!auth) {
+      setDadosCarregados(true);
+      return;
+    }
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
+        } else {
+          await signInAnonymously(auth);
+        }
+      } catch (err) {
+        console.error('Erro na autenticação:', err);
+        setDadosCarregados(true);
+      }
+    };
+    initAuth();
+    const unsub = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user || !db) return;
+    const stateDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'configuracoes', 'estado_geral');
+
+    const unsub = onSnapshot(
+      stateDocRef,
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
+          ignorarProximoSaveRef.current = true;
+          if (data.funcionariosJson) {
+            try {
+              setFuncionarios(JSON.parse(data.funcionariosJson));
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          if (data.frentesConfigJson) {
+            try {
+              setFrentesConfig(JSON.parse(data.frentesConfigJson));
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          if (data.apontamentosJson) {
+            try {
+              const apontamentosSalvos = JSON.parse(data.apontamentosJson);
+              // Mescla o histórico salvo na nuvem sem perder nenhum dia anterior
+              setApontamentosPorDia((prev) => ({
+                ...prev,
+                ...apontamentosSalvos
+              }));
+            } catch (e) {
+              console.error(e);
+            }
+          }
+          if (data.updatedAt) {
+            setUltimoSaveHora(data.updatedAt);
+          }
+        }
+        setDadosCarregados(true);
+      },
+      (err) => {
+        console.error('Erro ao ler dados salvos:', err);
+        setDadosCarregados(true);
+      }
+    );
+
+    return () => unsub();
+  }, [user]);
+
+  // Virada automática de dia: se o usuário deixar o sistema aberto de um dia para o outro,
+  // ao focar na aba no novo dia ele avança para a planilha reiniciada de hoje mantendo ontem salvo
+  useEffect(() => {
+    const verificarViradaDeDia = () => {
+      const hojeAtual = obterDataHojeISO();
+      const ultimaDataVista = window.__ultimaDataAtivaObra || dataHojeISO;
+      if (hojeAtual !== ultimaDataVista) {
+        window.__ultimaDataAtivaObra = hojeAtual;
+        setDataSelecionada(hojeAtual);
+        setTurnoSelecionado('MANHA');
+        mostrarAviso(`Novo dia detectado (${hojeAtual.split('-').reverse().join('/')})! Planilha reiniciada e dias anteriores salvos.`);
+      }
+    };
+    window.__ultimaDataAtivaObra = dataHojeISO;
+    window.addEventListener('focus', verificarViradaDeDia);
+    return () => window.removeEventListener('focus', verificarViradaDeDia);
+  }, [dataHojeISO]);
+
+  // ==========================================
+  // 2. AUTO-SAVE TODA VEZ QUE EDITAR O SITE
+  // ==========================================
+  useEffect(() => {
+    if (!dadosCarregados) return;
+    if (ignorarProximoSaveRef.current) {
+      ignorarProximoSaveRef.current = false;
+      return;
+    }
+
+    setStatusSave('Salvando alterações...');
+    const timer = setTimeout(async () => {
+      const agora = new Date().toLocaleTimeString('pt-BR', {
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit'
+      });
+
+      if (user && db) {
+        try {
+          const stateDocRef = doc(db, 'artifacts', appId, 'users', user.uid, 'configuracoes', 'estado_geral');
+          await setDoc(stateDocRef, {
+            funcionariosJson: JSON.stringify(funcionarios),
+            frentesConfigJson: JSON.stringify(frentesConfig),
+            apontamentosJson: JSON.stringify(apontamentosPorDia),
+            updatedAt: agora
+          });
+          setUltimoSaveHora(agora);
+          setStatusSave('Salvo automaticamente');
+        } catch (err) {
+          console.error('Erro no auto-save:', err);
+          setStatusSave('Erro ao salvar na nuvem');
+        }
+      } else {
+        setUltimoSaveHora(agora);
+        setStatusSave('Salvo na sessão');
+      }
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [funcionarios, frentesConfig, apontamentosPorDia, user, dadosCarregados]);
+
+  // Chave do Dia e Turno Ativo
+  const chaveAtual = `${dataSelecionada}_${turnoSelecionado}`;
+
+  // A cada novo dia (ou data ainda não aberta), cria automaticamente uma planilha reiniciada
+  // para Manhã e Tarde sem alterar nenhuma planilha dos dias anteriores
+  useEffect(() => {
+    if (!dadosCarregados) return;
+    const chaveManha = `${dataSelecionada}_MANHA`;
+    const chaveTarde = `${dataSelecionada}_TARDE`;
+
+    if (!apontamentosPorDia[chaveManha] || !apontamentosPorDia[chaveTarde]) {
+      setApontamentosPorDia((prev) => {
+        const novoEstado = { ...prev };
+        if (!novoEstado[chaveManha]) {
+          novoEstado[chaveManha] = gerarPlanilhaReiniciada(funcionarios, 'PADRAO');
+        }
+        if (!novoEstado[chaveTarde]) {
+          novoEstado[chaveTarde] = gerarPlanilhaReiniciada(funcionarios, 'PADRAO');
+        }
+        return novoEstado;
+      });
+    }
+  }, [dataSelecionada, apontamentosPorDia, funcionarios, dadosCarregados]);
+
+  // Lista de todas as datas que possuem planilhas salvas no histórico (ordenadas da mais recente para a mais antiga)
+  const datasSalvasNoHistorico = useMemo(() => {
+    const conjuntoDatas = new Set([dataHojeISO, '2026-11-11', dataSelecionada]);
+    Object.keys(apontamentosPorDia).forEach((chave) => {
+      const [dt] = chave.split('_');
+      if (dt) conjuntoDatas.add(dt);
+    });
+    return Array.from(conjuntoDatas).sort((a, b) => b.localeCompare(a));
+  }, [apontamentosPorDia, dataHojeISO, dataSelecionada]);
+
+  // Navegar para o dia anterior ou próximo dia facilmente
+  const alterarDiaOffset = (diasOffset) => {
+    const [ano, mes, dia] = dataSelecionada.split('-').map(Number);
+    const dt = new Date(ano, mes - 1, dia);
+    dt.setDate(dt.getDate() + diasOffset);
+    const novoAno = dt.getFullYear();
+    const novoMes = String(dt.getMonth() + 1).padStart(2, '0');
+    const novoDia = String(dt.getDate()).padStart(2, '0');
+    setDataSelecionada(`${novoAno}-${novoMes}-${novoDia}`);
+  };
+
+  // Reiniciar manualmente a planilha do dia atual sem afetar os dias anteriores
+  const reiniciarPlanilhaDiaAtual = (modo = 'PADRAO') => {
+    setApontamentosPorDia((prev) => ({
+      ...prev,
+      [chaveAtual]: gerarPlanilhaReiniciada(funcionarios, modo)
+    }));
+    setModalReiniciarDia(false);
+    mostrarAviso(
+      modo === 'PADRAO'
+        ? `Planilha de ${dataSelecionada.split('-').reverse().join('/')} (${turnoSelecionado}) reiniciada com a alocação padrão!`
+        : `Planilha de ${dataSelecionada.split('-').reverse().join('/')} (${turnoSelecionado}) zerada para nova chamada!`
+    );
+  };
+
+  const apontamentoAtual = apontamentosPorDia[chaveAtual] || {};
+
+  // Atualiza qualquer campo de apontamento de um colaborador (e dispara o auto-save)
+  const atualizarApontamento = (id, camposObj) => {
+    setApontamentosPorDia((prev) => {
+      const atualEmp = prev[chaveAtual]?.[id] || {};
+      return {
+        ...prev,
+        [chaveAtual]: {
+          ...(prev[chaveAtual] || {}),
+          [id]: {
+            ...atualEmp,
+            ...camposObj
+          }
+        }
+      };
+    });
+  };
+
+  // ==========================================
+  // PERSONALIZAÇÃO DE FUNCIONÁRIOS EM TEMPO REAL
+  // ==========================================
+  const atualizarCadastroFuncionario = (idAtual, novosCampos, sincronizarTurnoAtual = true) => {
+    setFuncionarios((prev) =>
+      prev.map((emp) => (emp.id === idAtual ? { ...emp, ...novosCampos } : emp))
+    );
+
+    if (sincronizarTurnoAtual) {
+      const camposTurno = {};
+      if (novosCampos.frentePadrao !== undefined) camposTurno.frente = novosCampos.frentePadrao;
+      if (novosCampos.subfrentePadrao !== undefined) camposTurno.subfrente = novosCampos.subfrentePadrao;
+      if (novosCampos.responsavel !== undefined) camposTurno.responsavel = novosCampos.responsavel;
+      if (Object.keys(camposTurno).length > 0) {
+        atualizarApontamento(idAtual, camposTurno);
+      }
+    }
+  };
+
+  // Altera o ID (Matrícula) do colaborador migrando também o histórico de dias
+  const alterarIdFuncionario = (idAntigo, novoIdBruto) => {
+    const novoId = (novoIdBruto || '').toUpperCase().trim();
+    if (!novoId || novoId === idAntigo) return false;
+
+    const jaExiste = funcionarios.some((f) => f.id === novoId);
+    if (jaExiste) {
+      mostrarAviso(`O ID "${novoId}" já está sendo usado por outro colaborador!`);
+      return false;
+    }
+
+    setFuncionarios((prev) =>
+      prev.map((emp) => (emp.id === idAntigo ? { ...emp, id: novoId } : emp))
+    );
+
+    setApontamentosPorDia((prev) => {
+      const novoMapa = {};
+      Object.keys(prev).forEach((chaveDia) => {
+        const mapaDia = { ...prev[chaveDia] };
+        if (mapaDia[idAntigo]) {
+          mapaDia[novoId] = mapaDia[idAntigo];
+          delete mapaDia[idAntigo];
+        }
+        novoMapa[chaveDia] = mapaDia;
+      });
+      return novoMapa;
+    });
+
+    if (colabEditandoRapido?.id === idAntigo) {
+      setColabEditandoRapido((prev) => (prev ? { ...prev, id: novoId } : null));
+    }
+    setIdTempModal(novoId);
+    mostrarAviso(`ID alterado de ${idAntigo} para ${novoId} em tempo real!`);
+    return true;
+  };
+
+  // Transferir colaborador de setor (CIVIL <-> METÁLICA) em tempo real
+  const alterarSetorFuncionario = (idAlvo, novoSetor) => {
+    const primeiraFrente = frentesConfig[novoSetor]?.[0];
+    const nomeFrente = primeiraFrente ? primeiraFrente.nome : '';
+    const subPadrao =
+      primeiraFrente && primeiraFrente.temSubfrentes
+        ? primeiraFrente.subfrentes[0] || ''
+        : '';
+
+    atualizarCadastroFuncionario(
+      idAlvo,
+      {
+        setor: novoSetor,
+        frentePadrao: nomeFrente,
+        subfrentePadrao: subPadrao,
+        responsavel: novoSetor === 'CIVIL' ? 'CIVIL' : 'METÁLICA'
+      },
+      true
+    );
+  };
+
+  // Excluir colaborador em tempo real
+  const excluirFuncionario = (idAlvo) => {
+    const alvo = funcionarios.find((f) => f.id === idAlvo);
+    setFuncionarios((prev) => prev.filter((emp) => emp.id !== idAlvo));
+    if (colabEditandoRapido?.id === idAlvo) {
+      setColabEditandoRapido(null);
+    }
+    setConfirmarExclusaoId(null);
+    if (alvo) {
+      mostrarAviso(`Colaborador ${alvo.nome} (${alvo.id}) excluído!`);
+    }
+  };
+
+  // Lista enriquecida com os dados do turno atual
+  const listaCompletaTurno = useMemo(() => {
+    return funcionarios.map((emp) => {
+      const reg = apontamentoAtual[emp.id] || {
+        status: 'PRESENTE',
+        frente: emp.frentePadrao,
+        subfrente: emp.subfrentePadrao || '',
+        responsavel: emp.responsavel
+      };
+      return {
+        ...emp,
+        statusAtual: reg.status || 'PRESENTE',
+        frenteAtual: reg.frente || emp.frentePadrao,
+        subfrenteAtual: reg.subfrente !== undefined ? reg.subfrente : emp.subfrentePadrao || '',
+        responsavelAtual: reg.responsavel !== undefined ? reg.responsavel : emp.responsavel || ''
+      };
+    });
+  }, [funcionarios, apontamentoAtual]);
+
+  // Frentes do Setor Selecionado
+  const frentesDoSetorAtivo = useMemo(() => {
+    return frentesConfig[setorFiltro] || [];
+  }, [frentesConfig, setorFiltro]);
+
+  // Encontrar objeto de configuração de uma frente pelo nome e setor
+  const obterConfigFrente = (setor, nomeFrente) => {
+    const lista = frentesConfig[setor] || [];
+    return lista.find((f) => f.nome === nomeFrente);
+  };
+
+  // Agrupamento exato para o Esqueleto da Planilha (Colunas lado a lado)
+  const dadosEsqueletoPlanilha = useMemo(() => {
+    const colunas = frentesDoSetorAtivo.map((frenteObj) => {
+      const colabs = listaCompletaTurno
+        .filter(
+          (emp) =>
+            emp.setor === setorFiltro &&
+            emp.statusAtual === 'PRESENTE' &&
+            emp.frenteAtual === frenteObj.nome
+        )
+        .sort((a, b) => {
+          if (frenteObj.temSubfrentes) {
+            const cmpSub = (a.subfrenteAtual || '').localeCompare(b.subfrenteAtual || '');
+            if (cmpSub !== 0) return cmpSub;
+          }
+          return a.id.localeCompare(b.id);
+        });
+
+      return {
+        ...frenteObj,
+        colaboradores: colabs
+      };
+    });
+
+    const maxLinhas = Math.max(...colunas.map((c) => c.colaboradores.length), 15);
+    return { colunas, maxLinhas };
+  }, [frentesDoSetorAtivo, listaCompletaTurno, setorFiltro]);
+
+  // Filtragem para Modo Celular e Lista de Apontamento
+  const listaFiltrada = useMemo(() => {
+    return listaCompletaTurno.filter((item) => {
+      if (item.setor !== setorFiltro) return false;
+      if (frenteFiltro !== 'TODAS' && item.frenteAtual !== frenteFiltro) return false;
+      if (statusFiltro !== 'TODOS') {
+        if (statusFiltro === 'OCORRENCIAS' && item.statusAtual === 'PRESENTE') return false;
+        if (statusFiltro !== 'OCORRENCIAS' && item.statusAtual !== statusFiltro) return false;
+      }
+      if (busca.trim() !== '') {
+        const t = busca.toLowerCase();
+        return (
+          item.nome.toLowerCase().includes(t) ||
+          item.id.toLowerCase().includes(t) ||
+          item.frenteAtual.toLowerCase().includes(t) ||
+          (item.subfrenteAtual && item.subfrenteAtual.toLowerCase().includes(t))
+        );
+      }
+      return true;
+    });
+  }, [listaCompletaTurno, setorFiltro, frenteFiltro, statusFiltro, busca]);
+
+  // KPIs do Setor Atual
+  const kpis = useMemo(() => {
+    const baseSetor = listaCompletaTurno.filter((i) => i.setor === setorFiltro);
+    const presentes = baseSetor.filter((i) => i.statusAtual === 'PRESENTE').length;
+    const faltas = baseSetor.filter((i) => i.statusAtual === 'FALTA').length;
+    const atestados = baseSetor.filter((i) => i.statusAtual === 'ATESTADO').length;
+    const outros = baseSetor.filter(
+      (i) => i.statusAtual !== 'PRESENTE' && i.statusAtual !== 'FALTA' && i.statusAtual !== 'ATESTADO'
+    ).length;
+
+    return { total: baseSetor.length, presentes, faltas, atestados, outros };
+  }, [listaCompletaTurno, setorFiltro]);
+
+  // ==========================================
+  // FUNÇÕES DE PERSONALIZAÇÃO DE FRENTES E SUB-FRENTES
+  // ==========================================
+  const renomearFrente = (setor, frenteId, novoNome) => {
+    const nomeLimpo = novoNome.toUpperCase();
+    const frenteAntiga = frentesConfig[setor].find((f) => f.id === frenteId);
+    if (!frenteAntiga || !nomeLimpo.trim()) return;
+    const nomeAntigo = frenteAntiga.nome;
+
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].map((f) => (f.id === frenteId ? { ...f, nome: nomeLimpo } : f))
+    }));
+
+    // Atualiza colaboradores que estavam naquela frente
+    setFuncionarios((prev) =>
+      prev.map((emp) =>
+        emp.setor === setor && emp.frentePadrao === nomeAntigo
+          ? { ...emp, frentePadrao: nomeLimpo }
+          : emp
+      )
+    );
+
+    setApontamentosPorDia((prev) => {
+      const copia = { ...prev };
+      Object.keys(copia).forEach((k) => {
+        const diaObj = { ...copia[k] };
+        Object.keys(diaObj).forEach((empId) => {
+          if (diaObj[empId].frente === nomeAntigo) {
+            diaObj[empId] = { ...diaObj[empId], frente: nomeLimpo };
+          }
+        });
+        copia[k] = diaObj;
+      });
+      return copia;
+    });
+  };
+
+  const alterarCorFrente = (setor, frenteId, novaCor) => {
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].map((f) => (f.id === frenteId ? { ...f, cor: novaCor } : f))
+    }));
+  };
+
+  const alternarUsoSubfrentes = (setor, frenteId) => {
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].map((f) =>
+        f.id === frenteId ? { ...f, temSubfrentes: !f.temSubfrentes } : f
+      )
+    }));
+  };
+
+  const adicionarNovaFrente = (e) => {
+    e.preventDefault();
+    if (!novaFrenteForm.nome.trim()) return;
+    const nomeUpper = novaFrenteForm.nome.trim().toUpperCase();
+    const nova = {
+      id: `frente_${Date.now()}`,
+      nome: nomeUpper,
+      cor: novaFrenteForm.cor,
+      temSubfrentes: novaFrenteForm.temSubfrentes,
+      subfrentes: novaFrenteForm.temSubfrentes ? ['GERAL'] : []
+    };
+
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [novaFrenteForm.setor]: [...prev[novaFrenteForm.setor], nova]
+    }));
+    setNovaFrenteForm({ ...novaFrenteForm, nome: '' });
+    mostrarAviso(`Frente "${nomeUpper}" criada com sucesso!`);
+  };
+
+  const removerFrente = (setor, frenteId) => {
+    if (frentesConfig[setor].length <= 1) {
+      mostrarAviso('O setor precisa ter pelo menos uma frente ativa.');
+      return;
+    }
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].filter((f) => f.id !== frenteId)
+    }));
+    mostrarAviso('Frente removida!');
+  };
+
+  const adicionarSubfrente = (setor, frenteId) => {
+    const texto = (novaSubfrenteInput[frenteId] || '').trim().toUpperCase();
+    if (!texto) return;
+
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].map((f) =>
+        f.id === frenteId && !f.subfrentes.includes(texto)
+          ? { ...f, subfrentes: [...f.subfrentes, texto] }
+          : f
+      )
+    }));
+    setNovaSubfrenteInput((prev) => ({ ...prev, [frenteId]: '' }));
+    mostrarAviso(`Sub-frente (Local) "${texto}" adicionada!`);
+  };
+
+  const removerSubfrente = (setor, frenteId, subNome) => {
+    setFrentesConfig((prev) => ({
+      ...prev,
+      [setor]: prev[setor].map((f) =>
+        f.id === frenteId
+          ? { ...f, subfrentes: f.subfrentes.filter((s) => s !== subNome) }
+          : f
+      )
+    }));
+  };
+
+  // ==========================================
+  // EXPORTAÇÃO CSV IDÊNTICA AO ESQUELETO DO PDF
+  // ==========================================
+  const exportarEsqueletoCSV = () => {
+    const { colunas, maxLinhas } = dadosEsqueletoPlanilha;
+    const dataBR = dataSelecionada.split('-').reverse().join('/');
+    let csv = '\uFEFF';
+    csv += `"CONTROLE DE COLABORADORES";"${dataBR}"\n`;
+
+    // Cabeçalho respeitando 2 colunas (FRENTE | ID) ou 3 colunas (DIVERSOS | ID | LOCAL)
+    const cabecalho = colunas
+      .map((col) =>
+        col.temSubfrentes
+          ? `"${col.nome}";"ID";"LOCAL"`
+          : `"${col.nome}";"ID"`
+      )
+      .join(';');
+    csv += cabecalho + '\n';
+
+    for (let r = 0; r < maxLinhas; r++) {
+      const linha = colunas
+        .map((col) => {
+          const emp = col.colaboradores[r];
+          if (col.temSubfrentes) {
+            return emp
+              ? `"${emp.nome}";"${emp.id}";"${emp.subfrenteAtual || ''}"`
+              : '"";"";""';
+          }
+          return emp ? `"${emp.nome}";"${emp.id}"` : '"";""';
+        })
+        .join(';');
+      csv += linha + '\n';
+    }
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `CONTROLE_DE_FUNCIONARIOS_${dataSelecionada}_${setorFiltro}.csv`;
+    a.click();
+    mostrarAviso('Planilha exportada com o esqueleto idêntico ao PDF!');
+  };
+
+  // Copiar Manhã para Tarde
+  const copiarManhaParaTarde = () => {
+    const chaveManha = `${dataSelecionada}_MANHA`;
+    const chaveTarde = `${dataSelecionada}_TARDE`;
+    if (!apontamentosPorDia[chaveManha]) return;
+    setApontamentosPorDia((prev) => ({
+      ...prev,
+      [chaveTarde]: JSON.parse(JSON.stringify(prev[chaveManha]))
+    }));
+    setTurnoSelecionado('TARDE');
+    mostrarAviso('Apontamento da Manhã copiado para a Tarde!');
+  };
+
+  // Cadastrar Novo Colaborador
+  const salvarNovoFuncionario = (e) => {
+    e.preventDefault();
+    if (!formNovoFunc.id.trim() || !formNovoFunc.nome.trim()) return;
+    const fConfig = obterConfigFrente(formNovoFunc.setor, formNovoFunc.frentePadrao);
+    const subPadrao =
+      fConfig && fConfig.temSubfrentes
+        ? formNovoFunc.subfrentePadrao || fConfig.subfrentes[0] || ''
+        : '';
+
+    const novo = {
+      id: formNovoFunc.id.trim().toUpperCase(),
+      nome: formNovoFunc.nome.trim().toUpperCase(),
+      setor: formNovoFunc.setor,
+      frentePadrao: formNovoFunc.frentePadrao,
+      subfrentePadrao: subPadrao,
+      responsavel: formNovoFunc.responsavel.trim().toUpperCase()
+    };
+
+    setFuncionarios((prev) => [novo, ...prev]);
+    atualizarApontamento(novo.id, {
+      status: 'PRESENTE',
+      frente: novo.frentePadrao,
+      subfrente: novo.subfrentePadrao,
+      responsavel: novo.responsavel
+    });
+
+    setNovoFuncModal(false);
+    setFormNovoFunc({
+      id: '',
+      nome: '',
+      setor: setorFiltro,
+      frentePadrao: frentesConfig[setorFiltro]?.[0]?.nome || '',
+      subfrentePadrao: '',
+      responsavel: setorFiltro
+    });
+    mostrarAviso(`Colaborador ${novo.nome} (${novo.id}) adicionado!`);
+  };
+
+  const dataFormatadaBR = dataSelecionada.split('-').reverse().join('/');
+  const totalOcorrenciasTurno = kpis.faltas + kpis.atestados + kpis.outros;
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-800 font-sans pb-16 antialiased">
+      {/* NOTIFICAÇÃO FLUTUANTE */}
+      {notificacao && (
+        <div className="fixed bottom-5 right-5 z-50 bg-slate-900 text-white px-4 py-3 rounded-2xl shadow-xl border border-slate-700 flex items-center gap-2.5 text-xs font-semibold animate-fade-in">
+          <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+          <span>{notificacao}</span>
+        </div>
+      )}
+
+      {/* CABEÇALHO UNIFICADO E MINIMALISTA */}
+      <header className="bg-white border-b border-slate-200/80 sticky top-0 z-30 shadow-xs print:hidden">
+        <div className="max-w-[1600px] mx-auto px-4 h-16 flex items-center justify-between gap-4">
+          {/* Logo & Status de Salvamento */}
+          <div className="flex items-center gap-3 shrink-0">
+            <div className="bg-gradient-to-br from-amber-400 to-amber-500 text-slate-950 p-2 rounded-xl shadow-xs">
+              <HardHat className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm sm:text-base font-extrabold text-slate-900 tracking-tight">
+                  Controle de Obra
+                </h1>
+                <span
+                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200/60"
+                  title={ultimoSaveHora ? `Último salvamento às ${ultimoSaveHora}` : statusSave}
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="hidden md:inline">{statusSave}</span>
+                  {ultimoSaveHora && <span className="text-emerald-600/80">• {ultimoSaveHora}</span>}
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 hidden sm:block">
+                Gestão diária de frentes e efetivo
+              </p>
+            </div>
+          </div>
+
+          {/* Navegação Central em Pílulas Simplificadas */}
+          <nav className="flex items-center gap-1 bg-slate-100/90 p-1 rounded-xl border border-slate-200/60 overflow-x-auto">
+            {[
+              { id: 'quadro', label: 'Planilha', icon: LayoutGrid },
+              { id: 'celular', label: 'Celular', icon: Smartphone },
+              { id: 'apontamento', label: 'Lista', icon: ClipboardList },
+              {
+                id: 'ocorrencias',
+                label: 'Faltas',
+                icon: AlertTriangle,
+                badge: totalOcorrenciasTurno
+              },
+              { id: 'personalizar', label: 'Ajustes', icon: Palette }
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const ativo = abaAtiva === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setAbaAtiva(tab.id)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition whitespace-nowrap ${
+                    ativo
+                      ? 'bg-white text-slate-900 shadow-xs border border-slate-200/60'
+                      : 'text-slate-500 hover:text-slate-900 hover:bg-white/50'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 ${ativo ? 'text-amber-500' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                  {tab.badge > 0 && (
+                    <span
+                      className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                        ativo ? 'bg-rose-100 text-rose-700' : 'bg-slate-200 text-slate-700'
+                      }`}
+                    >
+                      {tab.badge}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+
+          {/* Ações Principais */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => {
+                setFormNovoFunc({
+                  id: '',
+                  nome: '',
+                  setor: setorFiltro,
+                  frentePadrao: frentesConfig[setorFiltro]?.[0]?.nome || '',
+                  subfrentePadrao: '',
+                  responsavel: setorFiltro
+                });
+                setNovoFuncModal(true);
+              }}
+              className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-3 py-2 rounded-xl text-xs font-bold shadow-xs transition"
+            >
+              <UserPlus className="w-3.5 h-3.5 text-amber-400" />
+              <span className="hidden sm:inline">Novo</span>
+            </button>
+
+            <button
+              onClick={exportarEsqueletoCSV}
+              className="hidden md:flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 px-3 py-2 rounded-xl text-xs font-bold transition border border-slate-200"
+              title="Baixar Planilha em Excel (.CSV)"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Excel</span>
+            </button>
+
+            <button
+              onClick={() => setModalPdfAberto(true)}
+              disabled={gerandoPdf}
+              className="flex items-center gap-1.5 bg-sky-600 hover:bg-sky-500 text-white px-3.5 py-2 rounded-xl text-xs font-bold shadow-xs transition"
+            >
+              {gerandoPdf ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <FileDown className="w-3.5 h-3.5" />
+              )}
+              <span>PDF</span>
+            </button>
+          </div>
+        </div>
+
+        {/* BARRA DE CONTEXTO: SETOR, TURNO, DATA E INDICADORES */}
+        <div className="bg-slate-50/70 border-t border-slate-200/70">
+          <div className="max-w-[1600px] mx-auto px-4 py-2 flex flex-wrap items-center justify-between gap-3">
+            {/* Seletores de Setor, Turno e Data */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Setor */}
+              <div className="inline-flex rounded-xl bg-slate-200/70 p-0.5 border border-slate-200">
+                {[
+                  { id: 'METALICA', label: 'Metálica', icon: Wrench },
+                  { id: 'CIVIL', label: 'Civil', icon: Building2 }
+                ].map((s) => {
+                  const Icon = s.icon;
+                  const ativo = setorFiltro === s.id;
+                  return (
+                    <button
+                      key={s.id}
+                      onClick={() => {
+                        setSetorFiltro(s.id);
+                        setFrenteFiltro('TODAS');
+                      }}
+                      className={`flex items-center gap-1.5 px-3 py-1 text-xs font-bold rounded-lg transition ${
+                        ativo
+                          ? 'bg-white text-slate-900 shadow-xs'
+                          : 'text-slate-600 hover:text-slate-900'
+                      }`}
+                    >
+                      <Icon className={`w-3.5 h-3.5 ${ativo ? 'text-amber-500' : 'text-slate-400'}`} />
+                      {s.label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Turno */}
+              <div className="inline-flex rounded-xl bg-slate-200/70 p-0.5 border border-slate-200">
+                {[
+                  { id: 'MANHA', label: 'Manhã' },
+                  { id: 'TARDE', label: 'Tarde' }
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => setTurnoSelecionado(t.id)}
+                    className={`px-3 py-1 text-xs font-bold rounded-lg transition ${
+                      turnoSelecionado === t.id
+                        ? 'bg-white text-slate-900 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Navegador de Data + Histórico */}
+              <div className="flex items-center gap-1 bg-white px-2 py-1 rounded-xl border border-slate-200 shadow-2xs">
+                <button
+                  type="button"
+                  onClick={() => alterarDiaOffset(-1)}
+                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                  title="Dia Anterior"
+                >
+                  <ChevronLeft className="w-3.5 h-3.5" />
+                </button>
+
+                <input
+                  type="date"
+                  value={dataSelecionada}
+                  onChange={(e) => e.target.value && setDataSelecionada(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-slate-800 focus:outline-none cursor-pointer px-1"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => alterarDiaOffset(1)}
+                  className="p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg transition"
+                  title="Próximo Dia"
+                >
+                  <ChevronRight className="w-3.5 h-3.5" />
+                </button>
+
+                {dataSelecionada !== dataHojeISO && (
+                  <button
+                    type="button"
+                    onClick={() => setDataSelecionada(dataHojeISO)}
+                    className="ml-1 px-2 py-0.5 bg-amber-100 text-amber-900 rounded-md text-[10px] font-extrabold hover:bg-amber-200 transition"
+                  >
+                    Hoje
+                  </button>
+                )}
+
+                <div className="h-3.5 w-px bg-slate-200 mx-1" />
+
+                <History className="w-3.5 h-3.5 text-slate-400" />
+                <select
+                  value={dataSelecionada}
+                  onChange={(e) => setDataSelecionada(e.target.value)}
+                  className="bg-transparent text-[11px] font-semibold text-slate-600 focus:outline-none cursor-pointer pr-1"
+                  title="Histórico de dias salvos"
+                >
+                  {datasSalvasNoHistorico.map((dt) => {
+                    const dtBR = dt.split('-').reverse().join('/');
+                    const ehHoje = dt === dataHojeISO;
+                    return (
+                      <option key={dt} value={dt}>
+                        {ehHoje ? `Hoje (${dtBR})` : `Salvo: ${dtBR}`}
+                      </option>
+                    );
+                  })}
+                </select>
+              </div>
+            </div>
+
+            {/* Resumo Rápido (KPIs) & Ferramentas de Turno */}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 text-xs">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                  Presentes: {kpis.presentes}
+                </span>
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-rose-50 text-rose-800 border border-rose-200/80 font-bold">
+                  Faltas: {kpis.faltas}
+                </span>
+                {kpis.atestados > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200/80 font-bold">
+                    Atestados: {kpis.atestados}
+                  </span>
+                )}
+              </div>
+
+              <div className="h-4 w-px bg-slate-200 hidden sm:block" />
+
+              <div className="flex items-center gap-1.5">
+                {turnoSelecionado === 'MANHA' && (
+                  <button
+                    onClick={copiarManhaParaTarde}
+                    className="flex items-center gap-1 bg-white hover:bg-amber-50 text-slate-700 hover:text-amber-900 px-2.5 py-1 rounded-lg text-[11px] font-bold transition border border-slate-200"
+                    title="Copiar apontamento da Manhã para a Tarde"
+                  >
+                    <Copy className="w-3 h-3 text-amber-500" />
+                    <span>Copiar p/ Tarde</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setModalReiniciarDia(true)}
+                  className="flex items-center gap-1 bg-white hover:bg-rose-50 text-slate-600 hover:text-rose-700 px-2.5 py-1 rounded-lg text-[11px] font-bold transition border border-slate-200"
+                  title="Reiniciar apontamento deste turno"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Reiniciar</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="max-w-[1600px] mx-auto px-3 sm:px-4 py-5 space-y-5">
+        {/* =================================================================== */}
+        {/* ABA 1: ESQUELETO IDÊNTICO À PLANILHA PDF (VISUAL REFINADO)          */}
+        {/* =================================================================== */}
+        {abaAtiva === 'quadro' && (
+          <section className="space-y-3">
+            <div className="bg-white rounded-2xl shadow-xs border border-slate-200/90 overflow-hidden">
+              {/* Cabeçalho Limpo da Planilha */}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-slate-50/80 px-5 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 rounded-md bg-slate-900 text-white text-[11px] font-extrabold uppercase tracking-wider">
+                    {setorFiltro}
+                  </span>
+                  <span className="text-xs font-bold text-slate-500">
+                    {turnoSelecionado === 'MANHA' ? 'Turno da Manhã' : 'Turno da Tarde'}
+                  </span>
+                </div>
+
+                <h2 className="text-sm sm:text-base font-black tracking-wide text-slate-900 uppercase text-center">
+                  CONTROLE DE COLABORADORES — {dataFormatadaBR}
+                </h2>
+
+                <div className="text-[11px] text-slate-400 font-medium hidden md:flex items-center gap-1">
+                  <Edit3 className="w-3 h-3 text-amber-500" />
+                  <span>Clique em qualquer colaborador para editar</span>
+                </div>
+              </div>
+
+              {/* Grade Unificada Lado a Lado */}
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[11px] leading-tight">
+                  <thead>
+                    <tr>
+                      {dadosEsqueletoPlanilha.colunas.map((col) => (
+                        <React.Fragment key={col.id}>
+                          <th
+                            style={{ backgroundColor: col.cor }}
+                            className="text-white font-bold uppercase py-2.5 px-2.5 border border-slate-300/40 text-center tracking-wider min-w-[170px]"
+                          >
+                            <div className="flex items-center justify-center gap-1.5">
+                              <span>{col.nome}</span>
+                              <span className="bg-white/20 text-white text-[10px] px-1.5 py-0.5 rounded-full font-extrabold">
+                                {col.colaboradores.length}
+                              </span>
+                            </div>
+                          </th>
+                          <th
+                            style={{ backgroundColor: col.cor }}
+                            className="text-white/90 font-bold uppercase py-2.5 px-1.5 border border-slate-300/40 text-center w-14"
+                          >
+                            ID
+                          </th>
+                          {col.temSubfrentes && (
+                            <th
+                              style={{ backgroundColor: col.cor }}
+                              className="text-white/90 font-bold uppercase py-2.5 px-2 border border-slate-300/40 text-center min-w-[140px]"
+                            >
+                              LOCAL
+                            </th>
+                          )}
+                        </React.Fragment>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Array.from({ length: dadosEsqueletoPlanilha.maxLinhas }).map((_, rowIndex) => (
+                      <tr
+                        key={rowIndex}
+                        className={rowIndex % 2 === 1 ? 'bg-slate-50/60' : 'bg-white'}
+                      >
+                        {dadosEsqueletoPlanilha.colunas.map((col) => {
+                          const emp = col.colaboradores[rowIndex];
+                          return (
+                            <React.Fragment key={`${col.id}_${rowIndex}`}>
+                              {/* Célula NOME */}
+                              <td
+                                onClick={() => {
+                                  if (emp) {
+                                    setColabEditandoRapido(emp);
+                                    setIdTempModal(emp.id);
+                                    setConfirmarExclusaoId(null);
+                                  }
+                                }}
+                                className={`border border-slate-200 px-2 py-1.5 font-semibold text-slate-800 whitespace-nowrap ${
+                                  emp
+                                    ? 'cursor-pointer hover:bg-amber-50 hover:text-slate-950 transition'
+                                    : 'h-6'
+                                }`}
+                                title={emp ? 'Clique para personalizar ou mudar frente' : ''}
+                              >
+                                {emp ? emp.nome : ''}
+                              </td>
+
+                              {/* Célula ID */}
+                              <td
+                                onClick={() => {
+                                  if (emp) {
+                                    setColabEditandoRapido(emp);
+                                    setIdTempModal(emp.id);
+                                    setConfirmarExclusaoId(null);
+                                  }
+                                }}
+                                className={`border border-slate-200 px-1.5 py-1.5 font-mono font-bold text-center text-slate-600 bg-slate-50/40 whitespace-nowrap ${
+                                  emp ? 'cursor-pointer hover:bg-amber-50 hover:text-slate-950' : ''
+                                }`}
+                              >
+                                {emp ? emp.id : ''}
+                              </td>
+
+                              {/* Célula LOCAL (Sub-frente) */}
+                              {col.temSubfrentes && (
+                                <td
+                                  onClick={() => {
+                                    if (emp) {
+                                      setColabEditandoRapido(emp);
+                                      setIdTempModal(emp.id);
+                                      setConfirmarExclusaoId(null);
+                                    }
+                                  }}
+                                  className={`border border-slate-200 px-2 py-1.5 font-bold text-center text-purple-900 whitespace-nowrap bg-purple-50/30 ${
+                                    emp ? 'cursor-pointer hover:bg-amber-50' : ''
+                                  }`}
+                                >
+                                  {emp ? emp.subfrenteAtual || 'SEM LOCAL' : ''}
+                                </td>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 2: MODO CELULAR SIMPLIFICADO (ALTA AGILIDADE NO CAMPO)          */}
+        {/* =================================================================== */}
+        {abaAtiva === 'celular' && (
+          <section className="max-w-lg mx-auto space-y-3">
+            {/* Painel de Busca e Filtro Rápido */}
+            <div className="bg-white p-4 rounded-2xl shadow-xs border border-slate-200/90 space-y-3">
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Buscar por ID ou Nome..."
+                  className="w-full bg-slate-50 text-slate-900 pl-10 pr-9 py-2.5 rounded-xl text-xs font-semibold border border-slate-200 focus:bg-white focus:border-amber-500 focus:outline-none transition"
+                />
+                {busca && (
+                  <button
+                    onClick={() => setBusca('')}
+                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              {/* Pílulas de Frente */}
+              <div className="flex gap-1.5 overflow-x-auto pb-1">
+                <button
+                  onClick={() => setFrenteFiltro('TODAS')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                    frenteFiltro === 'TODAS'
+                      ? 'bg-slate-900 text-white shadow-2xs'
+                      : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                  }`}
+                >
+                  Todas ({listaCompletaTurno.filter((i) => i.setor === setorFiltro).length})
+                </button>
+                {frentesDoSetorAtivo.map((f) => (
+                  <button
+                    key={f.id}
+                    onClick={() => setFrenteFiltro(f.nome)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold whitespace-nowrap transition ${
+                      frenteFiltro === f.nome
+                        ? 'bg-slate-900 text-white shadow-2xs'
+                        : 'bg-slate-100 text-slate-600 hover:bg-slate-200/70'
+                    }`}
+                  >
+                    {f.nome}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lista de Cartões Limpos para Toque */}
+            <div className="space-y-2.5">
+              {listaFiltrada.map((emp) => {
+                const configFrenteAtual = obterConfigFrente(emp.setor, emp.frenteAtual);
+                return (
+                  <div
+                    key={emp.id}
+                    className="bg-white p-4 rounded-2xl shadow-2xs border border-slate-200/80 space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-xs bg-slate-100 text-slate-800 px-2 py-0.5 rounded-md border border-slate-200">
+                            {emp.id}
+                          </span>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              emp.statusAtual === 'PRESENTE'
+                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                : emp.statusAtual === 'FALTA'
+                                ? 'bg-rose-50 text-rose-700 border border-rose-200'
+                                : 'bg-amber-50 text-amber-700 border border-amber-200'
+                            }`}
+                          >
+                            {emp.statusAtual}
+                          </span>
+                        </div>
+                        <h3 className="font-bold text-sm text-slate-900 mt-1 truncate">
+                          {emp.nome}
+                        </h3>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setColabEditandoRapido(emp);
+                          setIdTempModal(emp.id);
+                          setConfirmarExclusaoId(null);
+                        }}
+                        className="p-2 rounded-xl bg-slate-50 hover:bg-slate-100 text-slate-500 hover:text-slate-900 border border-slate-200/80 transition"
+                        title="Editar colaborador"
+                      >
+                        <Edit3 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* Botões de Status com 1 Toque */}
+                    <div className="grid grid-cols-4 gap-1.5">
+                      {[
+                        { label: 'Presente', val: 'PRESENTE', active: 'bg-emerald-600 text-white border-emerald-600' },
+                        { label: 'Falta', val: 'FALTA', active: 'bg-rose-600 text-white border-rose-600' },
+                        { label: 'Atestado', val: 'ATESTADO', active: 'bg-sky-600 text-white border-sky-600' },
+                        {
+                          label: 'Não Visto',
+                          val: 'PONTO BATIDO, MAS NÃO FOI VISTO',
+                          active: 'bg-amber-500 text-slate-950 border-amber-500'
+                        }
+                      ].map((btn) => (
+                        <button
+                          key={btn.label}
+                          onClick={() => atualizarApontamento(emp.id, { status: btn.val })}
+                          className={`py-2 rounded-xl text-[11px] font-bold transition border ${
+                            emp.statusAtual === btn.val
+                              ? `${btn.active} shadow-2xs`
+                              : 'bg-slate-50/80 text-slate-600 border-slate-200/80 hover:bg-slate-100'
+                          }`}
+                        >
+                          {btn.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Seletores de Frente e Sub-frente */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-2 border-t border-slate-100">
+                      <div>
+                        <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-1">
+                          Frente
+                        </label>
+                        <select
+                          value={emp.frenteAtual}
+                          onChange={(e) => {
+                            const novaFrente = e.target.value;
+                            const cfg = obterConfigFrente(emp.setor, novaFrente);
+                            atualizarApontamento(emp.id, {
+                              frente: novaFrente,
+                              subfrente: cfg?.temSubfrentes ? cfg.subfrentes[0] || '' : ''
+                            });
+                          }}
+                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 focus:bg-white focus:border-amber-500 focus:outline-none"
+                        >
+                          {frentesDoSetorAtivo.map((f) => (
+                            <option key={f.id} value={f.nome}>
+                              {f.nome}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      {configFrenteAtual?.temSubfrentes && (
+                        <div>
+                          <label className="block text-[10px] font-semibold text-purple-600 uppercase mb-1">
+                            Local ({emp.frenteAtual})
+                          </label>
+                          <select
+                            value={emp.subfrenteAtual}
+                            onChange={(e) =>
+                              atualizarApontamento(emp.id, { subfrente: e.target.value })
+                            }
+                            className="w-full bg-purple-50/60 border border-purple-200 rounded-xl px-3 py-2 text-xs font-bold text-purple-950 focus:outline-none"
+                          >
+                            {configFrenteAtual.subfrentes.map((sub) => (
+                              <option key={sub} value={sub}>
+                                {sub}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 3: LISTA COMPLETA & APONTAMENTO EM TABELA                       */}
+        {/* =================================================================== */}
+        {abaAtiva === 'apontamento' && (
+          <section className="bg-white rounded-2xl shadow-xs border border-slate-200/90 overflow-hidden">
+            <div className="p-4 bg-white border-b border-slate-200/80 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              <div className="flex flex-1 items-center gap-2 bg-slate-50 px-3.5 py-2 rounded-xl border border-slate-200 focus-within:bg-white focus-within:border-amber-500 transition">
+                <Search className="w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={busca}
+                  onChange={(e) => setBusca(e.target.value)}
+                  placeholder="Filtrar por nome, matrícula (ID), frente ou sub-frente..."
+                  className="w-full text-xs bg-transparent focus:outline-none"
+                />
+                {busca && (
+                  <button onClick={() => setBusca('')} className="text-slate-400 hover:text-slate-600">
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  value={frenteFiltro}
+                  onChange={(e) => setFrenteFiltro(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="TODAS">Todas as Frentes ({setorFiltro})</option>
+                  {frentesDoSetorAtivo.map((f) => (
+                    <option key={f.id} value={f.nome}>
+                      {f.nome}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={statusFiltro}
+                  onChange={(e) => setStatusFiltro(e.target.value)}
+                  className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-700 focus:outline-none"
+                >
+                  <option value="TODOS">Todos os Status</option>
+                  <option value="PRESENTE">Somente Presentes</option>
+                  <option value="OCORRENCIAS">Somente Faltas / Ocorrências</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase border-b border-slate-200">
+                    <th className="py-3 px-4 w-28 font-bold">ID</th>
+                    <th className="py-3 px-4 min-w-[230px] font-bold">Colaborador</th>
+                    <th className="py-3 px-4 w-28 font-bold">Setor</th>
+                    <th className="py-3 px-4 font-bold">Frente</th>
+                    <th className="py-3 px-4 font-bold">Local (Sub-frente)</th>
+                    <th className="py-3 px-4 w-36 font-bold">Responsável</th>
+                    <th className="py-3 px-4 font-bold">Status</th>
+                    <th className="py-3 px-4 text-right w-24 font-bold">Ações</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {listaFiltrada.map((emp) => {
+                    const cfg = obterConfigFrente(emp.setor, emp.frenteAtual);
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-50/70 transition">
+                        <td className="py-2 px-4">
+                          <input
+                            type="text"
+                            defaultValue={emp.id}
+                            key={`id_${emp.id}`}
+                            onBlur={(e) => {
+                              if (e.target.value.trim().toUpperCase() !== emp.id) {
+                                const ok = alterarIdFuncionario(emp.id, e.target.value);
+                                if (!ok) e.target.value = emp.id;
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') e.currentTarget.blur();
+                            }}
+                            className="w-20 font-mono font-bold text-xs bg-slate-100/80 border border-transparent hover:border-slate-300 focus:border-amber-500 focus:bg-white rounded-lg px-2 py-1 text-slate-800 uppercase focus:outline-none transition"
+                          />
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <input
+                            type="text"
+                            value={emp.nome}
+                            onChange={(e) =>
+                              atualizarCadastroFuncionario(
+                                emp.id,
+                                { nome: e.target.value.toUpperCase() },
+                                false
+                              )
+                            }
+                            className="w-full font-semibold text-slate-900 bg-transparent border border-transparent hover:border-slate-200 focus:border-amber-500 focus:bg-white rounded-lg px-2 py-1 uppercase focus:outline-none transition"
+                          />
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <select
+                            value={emp.setor}
+                            onChange={(e) => alterarSetorFuncionario(emp.id, e.target.value)}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold border ${
+                              emp.setor === 'CIVIL'
+                                ? 'bg-orange-50/70 text-orange-800 border-orange-200/70'
+                                : 'bg-indigo-50/70 text-indigo-800 border-indigo-200/70'
+                            }`}
+                          >
+                            <option value="METALICA">METÁLICA</option>
+                            <option value="CIVIL">CIVIL</option>
+                          </select>
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <select
+                            value={emp.frenteAtual}
+                            onChange={(e) => {
+                              const novaF = e.target.value;
+                              const novaCfg = obterConfigFrente(emp.setor, novaF);
+                              const novaSub = novaCfg?.temSubfrentes
+                                ? novaCfg.subfrentes[0] || ''
+                                : '';
+                              atualizarApontamento(emp.id, {
+                                frente: novaF,
+                                subfrente: novaSub
+                              });
+                            }}
+                            className="border border-slate-200 rounded-lg px-2.5 py-1 font-semibold bg-white text-slate-800 focus:border-amber-500 focus:outline-none"
+                          >
+                            {(frentesConfig[emp.setor] || []).map((f) => (
+                              <option key={f.id} value={f.nome}>
+                                {f.nome}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td className="py-2 px-4">
+                          {cfg?.temSubfrentes ? (
+                            <select
+                              value={emp.subfrenteAtual}
+                              onChange={(e) =>
+                                atualizarApontamento(emp.id, { subfrente: e.target.value })
+                              }
+                              className="border border-purple-200 bg-purple-50/50 text-purple-900 rounded-lg px-2.5 py-1 font-semibold focus:outline-none"
+                            >
+                              {cfg.subfrentes.map((sub) => (
+                                <option key={sub} value={sub}>
+                                  {sub}
+                                </option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-slate-300">—</span>
+                          )}
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <input
+                            type="text"
+                            value={emp.responsavelAtual || ''}
+                            onChange={(e) =>
+                              atualizarCadastroFuncionario(
+                                emp.id,
+                                { responsavel: e.target.value.toUpperCase() },
+                                true
+                              )
+                            }
+                            placeholder="—"
+                            className="w-28 bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-amber-500 rounded-lg px-2 py-1 text-xs font-medium text-slate-600 uppercase focus:outline-none transition"
+                          />
+                        </td>
+
+                        <td className="py-2 px-4">
+                          <select
+                            value={emp.statusAtual}
+                            onChange={(e) =>
+                              atualizarApontamento(emp.id, { status: e.target.value })
+                            }
+                            className={`border rounded-lg px-2.5 py-1 font-bold text-[11px] focus:outline-none ${
+                              emp.statusAtual === 'PRESENTE'
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                                : emp.statusAtual === 'FALTA'
+                                ? 'bg-rose-50 text-rose-800 border-rose-200'
+                                : 'bg-amber-50 text-amber-800 border-amber-200'
+                            }`}
+                          >
+                            {STATUS_OPCOES.map((st) => (
+                              <option key={st} value={st} className="bg-white text-slate-800">
+                                {st}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+
+                        <td className="py-2 px-4 text-right whitespace-nowrap">
+                          {confirmarExclusaoId === emp.id ? (
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => excluirFuncionario(emp.id)}
+                                className="bg-rose-600 text-white px-2 py-1 rounded-md text-[10px] font-bold"
+                              >
+                                Sim
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmarExclusaoId(null)}
+                                className="bg-slate-200 text-slate-700 px-1.5 py-1 rounded-md text-[10px] font-bold"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="inline-flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setColabEditandoRapido(emp);
+                                  setIdTempModal(emp.id);
+                                  setConfirmarExclusaoId(null);
+                                }}
+                                className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition"
+                                title="Personalizar"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmarExclusaoId(emp.id)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                title="Excluir"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 4: RELATÓRIO DE FALTAS E OCORRÊNCIAS DO DIA                     */}
+        {/* =================================================================== */}
+        {abaAtiva === 'ocorrencias' && (
+          <section className="bg-white rounded-2xl shadow-xs border border-slate-200/90 overflow-hidden">
+            <div className="p-5 border-b border-slate-200/80 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-extrabold text-slate-900 uppercase">
+                  Relatório de Faltas e Ocorrências — {dataFormatadaBR} ({setorFiltro})
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Colaboradores ausentes, em atestado ou com batida não confirmada neste turno.
+                </p>
+              </div>
+              <button
+                onClick={gerarPdfSomenteFaltas}
+                disabled={gerandoPdf}
+                className="flex items-center gap-1.5 bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition"
+              >
+                {gerandoPdf ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <FileDown className="w-4 h-4" />
+                )}
+                Baixar PDF de Faltas
+              </button>
+            </div>
+
+            <table className="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr className="bg-slate-50/80 text-slate-500 text-[11px] uppercase border-b border-slate-200">
+                  <th className="py-3 px-5 font-bold">Funcionário</th>
+                  <th className="py-3 px-4 font-bold w-28 text-center">ID</th>
+                  <th className="py-3 px-4 font-bold w-48 text-center">Responsável</th>
+                  <th className="py-3 px-5 font-bold w-80">Justificativa / Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {listaCompletaTurno
+                  .filter((i) => i.setor === setorFiltro && i.statusAtual !== 'PRESENTE')
+                  .map((oc) => (
+                    <tr key={oc.id} className="hover:bg-slate-50/70 transition">
+                      <td className="py-3 px-5 font-bold text-slate-900">{oc.nome}</td>
+                      <td className="py-3 px-4 font-mono font-bold text-center text-slate-600">
+                        {oc.id}
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <input
+                          type="text"
+                          value={oc.responsavelAtual}
+                          onChange={(e) =>
+                            atualizarApontamento(oc.id, {
+                              responsavel: e.target.value.toUpperCase()
+                            })
+                          }
+                          className="border border-slate-200 rounded-lg px-2.5 py-1 text-center font-semibold w-36 focus:border-amber-500 focus:outline-none"
+                        />
+                      </td>
+                      <td className="py-3 px-5 flex items-center justify-between gap-2">
+                        <span className="px-2.5 py-1 rounded-full bg-rose-50 text-rose-700 border border-rose-200 font-bold text-[11px]">
+                          {oc.statusAtual}
+                        </span>
+                        <button
+                          onClick={() => atualizarApontamento(oc.id, { status: 'PRESENTE' })}
+                          className="text-emerald-600 hover:text-emerald-700 font-bold text-[11px] hover:underline"
+                        >
+                          Marcar Presente
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                {listaCompletaTurno.filter(
+                  (i) => i.setor === setorFiltro && i.statusAtual !== 'PRESENTE'
+                ).length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="p-10 text-center text-slate-400">
+                      <CheckCircle2 className="w-8 h-8 text-emerald-400 mx-auto mb-2 opacity-80" />
+                      <p className="font-bold text-slate-600 text-xs">
+                        100% do efetivo presente!
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        Nenhuma falta ou ocorrência registrada neste turno para {setorFiltro}.
+                      </p>
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </section>
+        )}
+
+        {/* =================================================================== */}
+        {/* ABA 5: PERSONALIZAR FRENTES, CORES & FUNCIONÁRIOS EM TEMPO REAL     */}
+        {/* =================================================================== */}
+        {abaAtiva === 'personalizar' && (
+          <section className="space-y-5">
+            {/* Seletor Limpo entre Frentes e Funcionários */}
+            <div className="bg-white p-3 rounded-2xl shadow-xs border border-slate-200/90 flex flex-wrap items-center justify-between gap-3">
+              <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200/60">
+                <button
+                  type="button"
+                  onClick={() => setSubAbaPersonalizar('frentes')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
+                    subAbaPersonalizar === 'frentes'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Palette className="w-4 h-4 text-amber-500" />
+                  Frentes, Cores & Locais ({setorFiltro})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSubAbaPersonalizar('funcionarios')}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition ${
+                    subAbaPersonalizar === 'funcionarios'
+                      ? 'bg-white text-slate-900 shadow-xs'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-sky-500" />
+                  Cadastro de Funcionários ({funcionarios.filter((f) => f.setor === setorFiltro).length})
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setFormNovoFunc({
+                    id: '',
+                    nome: '',
+                    setor: setorFiltro,
+                    frentePadrao: frentesConfig[setorFiltro]?.[0]?.nome || '',
+                    subfrentePadrao: '',
+                    responsavel: setorFiltro
+                  });
+                  setNovoFuncModal(true);
+                }}
+                className="flex items-center gap-1.5 bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-xl text-xs font-bold shadow-xs transition"
+              >
+                <UserPlus className="w-4 h-4 text-amber-400" />
+                Cadastrar Funcionário
+              </button>
+            </div>
+
+            {subAbaPersonalizar === 'frentes' ? (
+              <div className="space-y-5">
+                {/* Criar Nova Frente */}
+                <div className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/90">
+                  <h3 className="text-xs font-extrabold text-slate-900 uppercase tracking-wider flex items-center gap-2 mb-3">
+                    <Plus className="w-4 h-4 text-amber-500" />
+                    Criar Nova Frente em {setorFiltro}
+                  </h3>
+                  <form
+                    onSubmit={adicionarNovaFrente}
+                    className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end text-xs"
+                  >
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Nome da Frente</label>
+                      <input
+                        type="text"
+                        required
+                        value={novaFrenteForm.nome}
+                        onChange={(e) =>
+                          setNovaFrenteForm({
+                            ...novaFrenteForm,
+                            setor: setorFiltro,
+                            nome: e.target.value
+                          })
+                        }
+                        placeholder="Ex: COBERTURA, PINTURA..."
+                        className="w-full border border-slate-200 bg-slate-50 focus:bg-white rounded-xl px-3 py-2 font-bold uppercase focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-600 mb-1">Cor da Coluna</label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="color"
+                          value={novaFrenteForm.cor}
+                          onChange={(e) =>
+                            setNovaFrenteForm({ ...novaFrenteForm, cor: e.target.value })
+                          }
+                          className="w-10 h-9 rounded-lg cursor-pointer border border-slate-200"
+                        />
+                        <span className="font-mono text-slate-500">{novaFrenteForm.cor}</span>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pb-2">
+                      <input
+                        type="checkbox"
+                        id="chkSub"
+                        checked={novaFrenteForm.temSubfrentes}
+                        onChange={(e) =>
+                          setNovaFrenteForm({
+                            ...novaFrenteForm,
+                            temSubfrentes: e.target.checked
+                          })
+                        }
+                        className="w-4 h-4 rounded"
+                      />
+                      <label htmlFor="chkSub" className="font-semibold text-slate-700 cursor-pointer">
+                        Usar Sub-frentes (Coluna LOCAL)
+                      </label>
+                    </div>
+
+                    <button
+                      type="submit"
+                      className="bg-slate-900 hover:bg-slate-800 text-white font-bold py-2.5 px-4 rounded-xl shadow-xs transition"
+                    >
+                      + Adicionar Frente
+                    </button>
+                  </form>
+                </div>
+
+                {/* Cards de Cada Frente Existente */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {frentesDoSetorAtivo.map((frente) => (
+                    <div
+                      key={frente.id}
+                      className="bg-white rounded-2xl shadow-xs border border-slate-200/90 overflow-hidden flex flex-col"
+                    >
+                      <div
+                        style={{ backgroundColor: frente.cor }}
+                        className="px-4 py-3 text-white flex items-center justify-between"
+                      >
+                        <span className="font-extrabold text-xs tracking-wider uppercase">
+                          {frente.nome}
+                        </span>
+                        <button
+                          onClick={() => removerFrente(setorFiltro, frente.id)}
+                          className="text-white/80 hover:text-white text-[11px] flex items-center gap-1 bg-black/20 hover:bg-black/30 px-2.5 py-1 rounded-lg transition"
+                        >
+                          <Trash2 className="w-3 h-3" /> Excluir
+                        </button>
+                      </div>
+
+                      <div className="p-4 space-y-4 text-xs flex-1">
+                        <div>
+                          <label className="block font-semibold text-slate-500 mb-1">
+                            Nome da Frente
+                          </label>
+                          <input
+                            type="text"
+                            value={frente.nome}
+                            onChange={(e) =>
+                              renomearFrente(setorFiltro, frente.id, e.target.value)
+                            }
+                            className="w-full border border-slate-200 bg-slate-50 focus:bg-white rounded-xl px-3 py-2 font-bold uppercase text-slate-900 focus:border-amber-500 focus:outline-none transition"
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block font-semibold text-slate-500 mb-1.5">
+                            Cor na Planilha
+                          </label>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            {CORES_RAPIDAS.map((c) => (
+                              <button
+                                key={c}
+                                type="button"
+                                onClick={() => alterarCorFrente(setorFiltro, frente.id, c)}
+                                style={{ backgroundColor: c }}
+                                className={`w-6 h-6 rounded-full border-2 transition ${
+                                  frente.cor === c
+                                    ? 'border-amber-400 scale-110 shadow-xs'
+                                    : 'border-transparent opacity-85 hover:opacity-100'
+                                }`}
+                              />
+                            ))}
+                            <input
+                              type="color"
+                              value={frente.cor}
+                              onChange={(e) =>
+                                alterarCorFrente(setorFiltro, frente.id, e.target.value)
+                              }
+                              className="w-6 h-6 rounded-full cursor-pointer border border-slate-300 ml-1"
+                              title="Escolher outra cor"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="pt-3 border-t border-slate-100 space-y-2.5">
+                          <div className="flex items-center justify-between">
+                            <label className="font-bold text-slate-700 flex items-center gap-1.5">
+                              <Layers className="w-3.5 h-3.5 text-purple-600" />
+                              Sub-frentes (LOCAL)
+                            </label>
+                            <button
+                              type="button"
+                              onClick={() => alternarUsoSubfrentes(setorFiltro, frente.id)}
+                              className={`px-2.5 py-0.5 rounded-full font-bold text-[10px] transition ${
+                                frente.temSubfrentes
+                                  ? 'bg-purple-600 text-white'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {frente.temSubfrentes ? 'Ativo' : 'Desativado'}
+                            </button>
+                          </div>
+
+                          {frente.temSubfrentes && (
+                            <div className="bg-purple-50/50 p-3 rounded-xl border border-purple-200/70 space-y-2">
+                              <div className="flex gap-1.5">
+                                <input
+                                  type="text"
+                                  value={novaSubfrenteInput[frente.id] || ''}
+                                  onChange={(e) =>
+                                    setNovaSubfrenteInput({
+                                      ...novaSubfrenteInput,
+                                      [frente.id]: e.target.value
+                                    })
+                                  }
+                                  placeholder="Novo local..."
+                                  className="flex-1 bg-white border border-purple-200 rounded-lg px-2.5 py-1.5 uppercase font-semibold focus:outline-none"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => adicionarSubfrente(setorFiltro, frente.id)}
+                                  className="bg-purple-700 hover:bg-purple-600 text-white px-3 py-1.5 rounded-lg font-bold"
+                                >
+                                  +
+                                </button>
+                              </div>
+
+                              <div className="flex flex-wrap gap-1 max-h-36 overflow-y-auto pt-1">
+                                {frente.subfrentes.map((sub) => (
+                                  <span
+                                    key={sub}
+                                    className="inline-flex items-center gap-1 bg-white border border-purple-200 text-purple-950 px-2 py-0.5 rounded-md font-semibold text-[10px]"
+                                  >
+                                    {sub}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        removerSubfrente(setorFiltro, frente.id, sub)
+                                      }
+                                      className="text-rose-500 hover:text-rose-700 font-bold ml-0.5"
+                                    >
+                                      ×
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              /* SUB-ABA: PERSONALIZAR FUNCIONÁRIOS EM TEMPO REAL */
+              <div className="bg-white rounded-2xl shadow-xs border border-slate-200/90 overflow-hidden">
+                <div className="p-4 border-b border-slate-200/80 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                      Base de Funcionários ({setorFiltro})
+                    </h3>
+                    <p className="text-xs text-slate-500">
+                      Edite qualquer campo abaixo para atualizar a alocação padrão e a planilha em tempo real.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200 w-full md:w-80">
+                    <Search className="w-4 h-4 text-slate-400" />
+                    <input
+                      type="text"
+                      value={busca}
+                      onChange={(e) => setBusca(e.target.value)}
+                      placeholder="Buscar por nome, ID ou frente..."
+                      className="bg-transparent text-xs text-slate-800 w-full focus:outline-none"
+                    />
+                    {busca && (
+                      <button
+                        type="button"
+                        onClick={() => setBusca('')}
+                        className="text-slate-400 hover:text-slate-600"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto max-h-[600px]">
+                  <table className="w-full text-left border-collapse text-xs">
+                    <thead className="bg-slate-50 text-slate-500 text-[11px] uppercase sticky top-0 z-10 border-b border-slate-200">
+                      <tr>
+                        <th className="py-3 px-4 w-28 font-bold">ID</th>
+                        <th className="py-3 px-4 min-w-[240px] font-bold">Nome Completo</th>
+                        <th className="py-3 px-4 w-32 font-bold">Setor</th>
+                        <th className="py-3 px-4 font-bold">Frente Padrão</th>
+                        <th className="py-3 px-4 font-bold">Local Padrão</th>
+                        <th className="py-3 px-4 w-36 font-bold">Responsável</th>
+                        <th className="py-3 px-4 text-right w-24 font-bold">Excluir</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {funcionarios
+                        .filter((emp) => {
+                          if (emp.setor !== setorFiltro) return false;
+                          if (!busca.trim()) return true;
+                          const t = busca.toLowerCase();
+                          return (
+                            emp.nome.toLowerCase().includes(t) ||
+                            emp.id.toLowerCase().includes(t) ||
+                            emp.frentePadrao.toLowerCase().includes(t) ||
+                            (emp.subfrentePadrao && emp.subfrentePadrao.toLowerCase().includes(t))
+                          );
+                        })
+                        .map((emp) => {
+                          const cfgPadrao = obterConfigFrente(emp.setor, emp.frentePadrao);
+                          return (
+                            <tr key={emp.id} className="hover:bg-slate-50/70 transition">
+                              <td className="py-2 px-4">
+                                <input
+                                  type="text"
+                                  defaultValue={emp.id}
+                                  key={`cad_id_${emp.id}`}
+                                  onBlur={(e) => {
+                                    if (e.target.value.trim().toUpperCase() !== emp.id) {
+                                      const ok = alterarIdFuncionario(emp.id, e.target.value);
+                                      if (!ok) e.target.value = emp.id;
+                                    }
+                                  }}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') e.currentTarget.blur();
+                                  }}
+                                  className="w-24 font-mono font-bold bg-slate-100/80 border border-transparent hover:border-slate-300 focus:bg-white focus:border-amber-500 rounded-lg px-2.5 py-1.5 text-slate-900 uppercase focus:outline-none"
+                                />
+                              </td>
+                              <td className="py-2 px-4">
+                                <input
+                                  type="text"
+                                  value={emp.nome}
+                                  onChange={(e) =>
+                                    atualizarCadastroFuncionario(
+                                      emp.id,
+                                      { nome: e.target.value.toUpperCase() },
+                                      false
+                                    )
+                                  }
+                                  className="w-full font-semibold text-slate-900 bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-amber-500 rounded-lg px-2.5 py-1.5 uppercase focus:outline-none"
+                                />
+                              </td>
+                              <td className="py-2 px-4">
+                                <select
+                                  value={emp.setor}
+                                  onChange={(e) => alterarSetorFuncionario(emp.id, e.target.value)}
+                                  className="w-full border border-slate-200 rounded-lg px-2 py-1.5 font-bold bg-white"
+                                >
+                                  <option value="METALICA">METÁLICA</option>
+                                  <option value="CIVIL">CIVIL</option>
+                                </select>
+                              </td>
+                              <td className="py-2 px-4">
+                                <select
+                                  value={emp.frentePadrao}
+                                  onChange={(e) => {
+                                    const novaF = e.target.value;
+                                    const novaCfg = obterConfigFrente(emp.setor, novaF);
+                                    const novaSub = novaCfg?.temSubfrentes
+                                      ? novaCfg.subfrentes[0] || ''
+                                      : '';
+                                    atualizarCadastroFuncionario(
+                                      emp.id,
+                                      {
+                                        frentePadrao: novaF,
+                                        subfrentePadrao: novaSub
+                                      },
+                                      true
+                                    );
+                                  }}
+                                  className="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 font-semibold bg-white"
+                                >
+                                  {(frentesConfig[emp.setor] || []).map((f) => (
+                                    <option key={f.id} value={f.nome}>
+                                      {f.nome}
+                                    </option>
+                                  ))}
+                                </select>
+                              </td>
+                              <td className="py-2 px-4">
+                                {cfgPadrao?.temSubfrentes ? (
+                                  <select
+                                    value={emp.subfrentePadrao || ''}
+                                    onChange={(e) =>
+                                      atualizarCadastroFuncionario(
+                                        emp.id,
+                                        { subfrentePadrao: e.target.value },
+                                        true
+                                      )
+                                    }
+                                    className="w-full border border-purple-200 bg-purple-50/50 text-purple-950 rounded-lg px-2.5 py-1.5 font-semibold"
+                                  >
+                                    {cfgPadrao.subfrentes.map((sub) => (
+                                      <option key={sub} value={sub}>
+                                        {sub}
+                                      </option>
+                                    ))}
+                                  </select>
+                                ) : (
+                                  <span className="text-slate-300">—</span>
+                                )}
+                              </td>
+                              <td className="py-2 px-4">
+                                <input
+                                  type="text"
+                                  value={emp.responsavel || ''}
+                                  onChange={(e) =>
+                                    atualizarCadastroFuncionario(
+                                      emp.id,
+                                      { responsavel: e.target.value.toUpperCase() },
+                                      true
+                                    )
+                                  }
+                                  className="w-full bg-transparent border border-transparent hover:border-slate-200 focus:bg-white focus:border-amber-500 rounded-lg px-2.5 py-1.5 font-medium uppercase focus:outline-none"
+                                />
+                              </td>
+                              <td className="py-2 px-4 text-right">
+                                {confirmarExclusaoId === emp.id ? (
+                                  <div className="inline-flex items-center gap-1">
+                                    <button
+                                      type="button"
+                                      onClick={() => excluirFuncionario(emp.id)}
+                                      className="bg-rose-600 text-white px-2.5 py-1 rounded-lg text-[10px] font-bold"
+                                    >
+                                      Sim
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setConfirmarExclusaoId(null)}
+                                      className="bg-slate-200 text-slate-700 px-2 py-1 rounded-lg text-[10px] font-bold"
+                                    >
+                                      ✕
+                                    </button>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmarExclusaoId(emp.id)}
+                                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                    title="Excluir colaborador"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </section>
+        )}
+      </main>
+
+      {/* =================================================================== */}
+      {/* MODAL DE PERSONALIZAÇÃO EM TEMPO REAL DIRETO DA PLANILHA            */}
+      {/* =================================================================== */}
+      {colabEditandoRapido && (() => {
+        const empAoVivo =
+          listaCompletaTurno.find((e) => e.id === colabEditandoRapido.id) ||
+          colabEditandoRapido;
+        const cfgAoVivo = obterConfigFrente(empAoVivo.setor, empAoVivo.frenteAtual);
+
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+              <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Edit3 className="w-4 h-4 text-amber-400" />
+                  <div>
+                    <span className="text-[10px] uppercase tracking-wider text-amber-400 font-bold block">
+                      Personalização em Tempo Real
+                    </span>
+                    <h3 className="font-black text-sm">{empAoVivo.nome}</h3>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setColabEditandoRapido(null)}
+                  className="text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="p-5 space-y-4 text-xs max-h-[82vh] overflow-y-auto">
+                {/* Bloco 1: Dados Cadastrais (ID, Nome, Setor e Responsável) */}
+                <div className="bg-slate-50 p-3.5 rounded-xl border border-slate-200 space-y-3">
+                  <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider block">
+                    1. Dados do Colaborador (Atualiza na hora)
+                  </span>
+
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">ID / Código</label>
+                      <div className="flex gap-1">
+                        <input
+                          type="text"
+                          value={idTempModal}
+                          onChange={(e) => setIdTempModal(e.target.value.toUpperCase())}
+                          onBlur={() => {
+                            if (idTempModal.trim() && idTempModal !== empAoVivo.id) {
+                              const ok = alterarIdFuncionario(empAoVivo.id, idTempModal);
+                              if (!ok) setIdTempModal(empAoVivo.id);
+                            }
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') e.currentTarget.blur();
+                          }}
+                          className="w-full font-mono font-black border border-slate-300 rounded-lg px-2.5 py-2 uppercase bg-white focus:border-amber-500 focus:outline-none"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="col-span-2">
+                      <label className="block font-bold text-slate-700 mb-1">Nome Completo</label>
+                      <input
+                        type="text"
+                        value={empAoVivo.nome}
+                        onChange={(e) =>
+                          atualizarCadastroFuncionario(
+                            empAoVivo.id,
+                            { nome: e.target.value.toUpperCase() },
+                            false
+                          )
+                        }
+                        className="w-full font-black border border-slate-300 rounded-lg px-3 py-2 uppercase bg-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Setor da Obra</label>
+                      <select
+                        value={empAoVivo.setor}
+                        onChange={(e) => alterarSetorFuncionario(empAoVivo.id, e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg px-2.5 py-2 font-black bg-white"
+                      >
+                        <option value="METALICA">METÁLICA</option>
+                        <option value="CIVIL">CIVIL</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-bold text-slate-700 mb-1">Responsável</label>
+                      <input
+                        type="text"
+                        value={empAoVivo.responsavelAtual || ''}
+                        onChange={(e) =>
+                          atualizarCadastroFuncionario(
+                            empAoVivo.id,
+                            { responsavel: e.target.value.toUpperCase() },
+                            true
+                          )
+                        }
+                        placeholder="Ex: METÁLICA, REGINALDO"
+                        className="w-full font-bold border border-slate-300 rounded-lg px-2.5 py-2 uppercase bg-white focus:border-amber-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Bloco 2: Alocação de Frente e Sub-frente (Local) */}
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">
+                      Frente de Serviço (Fixa como padrão + Turno atual):
+                    </label>
+                    <select
+                      value={empAoVivo.frenteAtual}
+                      onChange={(e) => {
+                        const novaF = e.target.value;
+                        const cfg = obterConfigFrente(empAoVivo.setor, novaF);
+                        const novaSub = cfg?.temSubfrentes ? cfg.subfrentes[0] || '' : '';
+                        atualizarCadastroFuncionario(
+                          empAoVivo.id,
+                          {
+                            frentePadrao: novaF,
+                            subfrentePadrao: novaSub
+                          },
+                          true
+                        );
+                      }}
+                      className="w-full border border-slate-300 rounded-xl px-3 py-2.5 font-black text-slate-900"
+                    >
+                      {(frentesConfig[empAoVivo.setor] || []).map((f) => (
+                        <option key={f.id} value={f.nome}>
+                          {f.nome}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {cfgAoVivo?.temSubfrentes && (
+                    <div>
+                      <label className="block font-bold text-purple-800 mb-1">
+                        Sub-frente (Coluna LOCAL):
+                      </label>
+                      <select
+                        value={empAoVivo.subfrenteAtual || ''}
+                        onChange={(e) =>
+                          atualizarCadastroFuncionario(
+                            empAoVivo.id,
+                            { subfrentePadrao: e.target.value },
+                            true
+                          )
+                        }
+                        className="w-full border border-purple-300 bg-purple-50 rounded-xl px-3 py-2.5 font-black text-purple-950"
+                      >
+                        {cfgAoVivo.subfrentes.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                {/* Bloco 3: Status no Turno */}
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">
+                    Status no Turno ({turnoSelecionado}):
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {STATUS_OPCOES.slice(0, 4).map((st) => {
+                      const stAtual = empAoVivo.statusAtual || 'PRESENTE';
+                      return (
+                        <button
+                          key={st}
+                          type="button"
+                          onClick={() =>
+                            atualizarApontamento(empAoVivo.id, { status: st })
+                          }
+                          className={`py-2 px-3 rounded-xl font-black border text-center transition ${
+                            stAtual === st
+                              ? 'bg-slate-900 text-amber-400 border-slate-900'
+                              : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'
+                          }`}
+                        >
+                          {st}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Rodapé com Opção de Excluir e Concluir */}
+                <div className="pt-3 border-t border-slate-200 flex items-center justify-between gap-2">
+                  {confirmarExclusaoId === empAoVivo.id ? (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => excluirFuncionario(empAoVivo.id)}
+                        className="bg-rose-600 hover:bg-rose-500 text-white font-black px-3 py-2 rounded-xl"
+                      >
+                        Confirmar Exclusão
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setConfirmarExclusaoId(null)}
+                        className="bg-slate-200 text-slate-700 font-bold px-2.5 py-2 rounded-xl"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setConfirmarExclusaoId(empAoVivo.id)}
+                      className="flex items-center gap-1.5 text-rose-600 hover:bg-rose-50 px-3 py-2 rounded-xl font-bold transition"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Excluir Colaborador
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => setColabEditandoRapido(null)}
+                    className="bg-amber-500 hover:bg-amber-400 text-slate-950 font-black px-5 py-2 rounded-xl shadow"
+                  >
+                    Concluído
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =================================================================== */}
+      {/* MODAL PARA ADICIONAR NOVO FUNCIONÁRIO                               */}
+      {/* =================================================================== */}
+      {novoFuncModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <h3 className="font-bold text-sm flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-amber-400" />
+                Novo Colaborador na Planilha
+              </h3>
+              <button
+                onClick={() => setNovoFuncModal(false)}
+                className="text-slate-400 hover:text-white text-sm"
+              >
+                ✕
+              </button>
+            </div>
+            <form onSubmit={salvarNovoFuncionario} className="p-5 space-y-4 text-xs">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formNovoFunc.id}
+                    onChange={(e) => setFormNovoFunc({ ...formNovoFunc, id: e.target.value })}
+                    placeholder="Ex: SE120"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-mono uppercase"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Nome Completo *</label>
+                  <input
+                    type="text"
+                    required
+                    value={formNovoFunc.nome}
+                    onChange={(e) => setFormNovoFunc({ ...formNovoFunc, nome: e.target.value })}
+                    placeholder="Nome do colaborador"
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 uppercase"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Setor *</label>
+                  <select
+                    value={formNovoFunc.setor}
+                    onChange={(e) => {
+                      const novoSetor = e.target.value;
+                      const primeiraFrente = frentesConfig[novoSetor]?.[0]?.nome || '';
+                      setFormNovoFunc({
+                        ...formNovoFunc,
+                        setor: novoSetor,
+                        frentePadrao: primeiraFrente,
+                        subfrentePadrao: ''
+                      });
+                    }}
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
+                  >
+                    <option value="METALICA">METÁLICA</option>
+                    <option value="CIVIL">CIVIL</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Frente *</label>
+                  <select
+                    value={formNovoFunc.frentePadrao}
+                    onChange={(e) =>
+                      setFormNovoFunc({ ...formNovoFunc, frentePadrao: e.target.value })
+                    }
+                    className="w-full border border-slate-300 rounded-lg px-3 py-2 font-bold"
+                  >
+                    {(frentesConfig[formNovoFunc.setor] || []).map((f) => (
+                      <option key={f.id} value={f.nome}>
+                        {f.nome}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {(() => {
+                const cfg = obterConfigFrente(formNovoFunc.setor, formNovoFunc.frentePadrao);
+                if (!cfg?.temSubfrentes) return null;
+                return (
+                  <div>
+                    <label className="block font-bold text-purple-800 mb-1">
+                      Sub-frente (LOCAL) *
+                    </label>
+                    <select
+                      value={formNovoFunc.subfrentePadrao || cfg.subfrentes[0] || ''}
+                      onChange={(e) =>
+                        setFormNovoFunc({ ...formNovoFunc, subfrentePadrao: e.target.value })
+                      }
+                      className="w-full border border-purple-300 bg-purple-50 rounded-lg px-3 py-2 font-bold text-purple-950"
+                    >
+                      {cfg.subfrentes.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              })()}
+
+              <div className="pt-2 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNovoFuncModal(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-600 font-semibold"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-2 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold shadow"
+                >
+                  Adicionar à Planilha
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL DE EXPORTAÇÃO DE PDF EM ALTA DEFINIÇÃO (VETORIAL)             */}
+      {/* =================================================================== */}
+      {modalPdfAberto && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-lg w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="bg-sky-500/20 text-sky-400 p-2 rounded-lg">
+                  <FileDown className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-black text-sm">
+                    Exportar PDF Vetorial de Alta Qualidade
+                  </h3>
+                  <p className="text-[11px] text-slate-400">
+                    Setor: {setorFiltro} • Data: {dataFormatadaBR} • Turno: {turnoSelecionado}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setModalPdfAberto(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              <p className="text-slate-600 font-medium">
+                Escolha o formato de PDF que deseja baixar. Todos os arquivos são gerados em formato vetorial (não perdem qualidade ao dar zoom ou imprimir):
+              </p>
+
+              {/* Opção 1: Planilha A4 Paisagem */}
+              <button
+                onClick={() => gerarPdfPlanilhaOficial('a4', false)}
+                disabled={gerandoPdf}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-sky-500 bg-sky-50/60 hover:bg-sky-100/70 transition flex items-center justify-between gap-3"
+              >
+                <div>
+                  <span className="font-black text-slate-900 text-sm block">
+                    1. Planilha de Frentes de Serviço (A4 Paisagem)
+                  </span>
+                  <span className="text-slate-600 text-[11px]">
+                    Idêntica ao PDF oficial ({setorFiltro}), com todas as colunas lado a lado, cores personalizadas e coluna LOCAL.
+                  </span>
+                </div>
+                <span className="bg-sky-600 text-white font-black px-3 py-1.5 rounded-lg shrink-0">
+                  Baixar A4
+                </span>
+              </button>
+
+              {/* Opção 2: Planilha A3 Paisagem (Mais espaçosa para muitas colunas) */}
+              <button
+                onClick={() => gerarPdfPlanilhaOficial('a3', false)}
+                disabled={gerandoPdf}
+                className="w-full text-left p-3.5 rounded-xl border border-slate-300 hover:border-slate-400 hover:bg-slate-50 transition flex items-center justify-between gap-3"
+              >
+                <div>
+                  <span className="font-black text-slate-900 text-sm block">
+                    2. Planilha de Frentes Amplificada (A3 Paisagem)
+                  </span>
+                  <span className="text-slate-600 text-[11px]">
+                    Ideal para visualização ampla no celular/computador ou impressão grande em canteiro de obras.
+                  </span>
+                </div>
+                <span className="bg-slate-800 text-white font-black px-3 py-1.5 rounded-lg shrink-0">
+                  Baixar A3
+                </span>
+              </button>
+
+              {/* Opção 3: Pacote Completo (Planilha + Relatório de Faltas) */}
+              <button
+                onClick={() => gerarPdfPlanilhaOficial('a4', true)}
+                disabled={gerandoPdf}
+                className="w-full text-left p-3.5 rounded-xl border border-amber-300 bg-amber-50/50 hover:bg-amber-100/60 transition flex items-center justify-between gap-3"
+              >
+                <div>
+                  <span className="font-black text-slate-900 text-sm block">
+                    3. Pacote Completo (Planilha de Frentes + Relatório de Faltas)
+                  </span>
+                  <span className="text-slate-600 text-[11px]">
+                    Gera um único PDF contendo a Planilha de Frentes na Página 1 e o Relatório de Faltas na Página 2.
+                  </span>
+                </div>
+                <span className="bg-amber-500 text-slate-950 font-black px-3 py-1.5 rounded-lg shrink-0">
+                  Completo
+                </span>
+              </button>
+
+              {/* Opção 4: Somente Relatório de Faltas */}
+              <button
+                onClick={gerarPdfSomenteFaltas}
+                disabled={gerandoPdf}
+                className="w-full text-left p-3.5 rounded-xl border border-rose-200 bg-rose-50/40 hover:bg-rose-100/50 transition flex items-center justify-between gap-3"
+              >
+                <div>
+                  <span className="font-black text-rose-950 text-sm block">
+                    4. Somente Relatório de Faltas e Ocorrências (A4 Retrato)
+                  </span>
+                  <span className="text-rose-700 text-[11px]">
+                    Lista apenas os colaboradores ausentes, com atestado ou batida não encontrada no dia.
+                  </span>
+                </div>
+                <span className="bg-rose-600 text-white font-black px-3 py-1.5 rounded-lg shrink-0">
+                  Faltas
+                </span>
+              </button>
+            </div>
+
+            <div className="bg-slate-100 px-5 py-3 flex items-center justify-between border-t border-slate-200">
+              <span className="text-[11px] text-slate-500">
+                {gerandoPdf ? 'Gerando documento vetorial...' : 'Pronto para download imediato'}
+              </span>
+              <button
+                onClick={() => setModalPdfAberto(false)}
+                className="px-4 py-1.5 rounded-lg border border-slate-300 bg-white text-slate-700 font-bold text-xs hover:bg-slate-50"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL PARA REINICIAR PLANILHA DO DIA ATUAL                          */}
+      {/* =================================================================== */}
+      {modalReiniciarDia && (
+        <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-200 max-w-md w-full overflow-hidden">
+            <div className="bg-slate-900 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <RotateCcw className="w-4 h-4 text-amber-400" />
+                <h3 className="font-black text-sm">
+                  Reiniciar Planilha de {dataFormatadaBR} ({turnoSelecionado})
+                </h3>
+              </div>
+              <button
+                onClick={() => setModalReiniciarDia(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-5 space-y-3 text-xs">
+              <p className="text-slate-600 leading-relaxed">
+                Esta ação reinicia <strong>apenas o dia {dataFormatadaBR} ({turnoSelecionado})</strong>. Todas as planilhas de dias anteriores continuarão salvas normalmente no histórico.
+              </p>
+
+              <button
+                type="button"
+                onClick={() => reiniciarPlanilhaDiaAtual('PADRAO')}
+                className="w-full text-left p-3.5 rounded-xl border-2 border-emerald-500 bg-emerald-50/60 hover:bg-emerald-100/70 transition"
+              >
+                <span className="font-black text-emerald-950 text-sm block">
+                  1. Restaurar Alocação Padrão (Todos Presentes)
+                </span>
+                <span className="text-emerald-800 text-[11px]">
+                  Todos os colaboradores voltam como PRESENTE nas suas frentes e sub-frentes padrão.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => reiniciarPlanilhaDiaAtual('EM_BRANCO')}
+                className="w-full text-left p-3.5 rounded-xl border border-slate-300 hover:bg-slate-50 transition"
+              >
+                <span className="font-black text-slate-900 text-sm block">
+                  2. Iniciar Chamada do Zero (Todos Não Confirmados)
+                </span>
+                <span className="text-slate-600 text-[11px]">
+                  Deixa a planilha limpa para que você marque um por um quem está presente na obra hoje.
+                </span>
+              </button>
+
+              <div className="pt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => setModalReiniciarDia(false)}
+                  className="px-4 py-2 rounded-lg border border-slate-300 text-slate-700 font-bold hover:bg-slate-50"
+                >
+                  Cancelar
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
